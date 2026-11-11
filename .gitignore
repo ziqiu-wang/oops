@@ -1,0 +1,81 @@
+# CMake build directories and generated files
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+compile_commands.json
+CMakeUserPresets.json
+
+# Compiled C/C++ and CUDA/OptiX artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.pch
+*.ipch
+*.ptx
+*.optixir
+*.cubin
+*.fatbin
+
+# Visual Studio and other local IDE state
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+*.opendb
+
+# Temporary files and local Python tooling
+/tmp/
+/temp/
+.cache/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# Generated renders; keep images intended for documentation under docs/assets/
+/renders/
+/render_output/
+/captures/
+/s[0-9][0-9]-*.png
+/*.ppm
+/*.pfm
+/*.exr
+
+# NVIDIA profiling captures
+/profiles/
+*.nsys-rep
+*.qdrep
+*.qdstrm
+*.ncu-rep
+*.nvprof
+*.nvvp
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
