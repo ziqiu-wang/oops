@@ -28,7 +28,22 @@ FetchContent_Declare(glew
     GIT_REPOSITORY https://github.com/Perlmint/glew-cmake.git
     GIT_TAG glew-cmake-2.2.0)
 
-FetchContent_MakeAvailable(glfw glew)
+FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.91.5)
+
+FetchContent_MakeAvailable(glfw glew imgui)
+
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
 
 add_library(oops_common src/Scene.cpp src/Reference.cpp)
 target_include_directories(oops_common PUBLIC src external/owl/include)
@@ -42,7 +57,7 @@ target_link_libraries(oops_gpu PUBLIC oops_common owl::owl CUDA::cudart PRIVATE 
 
 add_library(oops_window src/Window.cpp)
 target_include_directories(oops_window PUBLIC src)
-target_link_libraries(oops_window PUBLIC glfw libglew_static OpenGL::GL CUDA::cudart)
+target_link_libraries(oops_window PUBLIC glfw libglew_static OpenGL::GL CUDA::cudart imgui)
 
 add_executable(test_window tests/test_window.cpp)
 target_link_libraries(test_window PRIVATE oops_window)

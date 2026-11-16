@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <imgui.h>
 #include "Window.h"
 
 using namespace oops;
@@ -151,6 +152,8 @@ int main(int argc, char** argv) {
                 Window window(800, 600, "mochi");
                 OrbitCamera orbit = simulation.defaultCamera();
                 while (!window.shouldClose()) {
+                    window.beginUi();
+                    ImGui::ShowDemoWindow();
                     for (int i = 0; i < displayEvery; ++i) {
                         simulation.step(rebuildEvery);
                         afterStep();

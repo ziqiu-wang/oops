@@ -39,6 +39,8 @@ namespace oops
         int height() const { return height_; }
         bool minimized() const { return width_ == 0 || height_ == 0; }
 
+        void beginUi();
+
     private:
         int width_, height_;
         GLFWwindow *window_ = nullptr;

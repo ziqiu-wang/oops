@@ -3,8 +3,11 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <stdexcept>
-#include "Window.h"
 #include <string>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+#include "Window.h"
 
 namespace oops
 {
@@ -89,24 +92,6 @@ void main() { color = texture(image, uv); }
         self->pendingHeight_ = height;
         self->resized_ = true; });
 
-        // glGenBuffers(1, &pbo_);
-        // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
-        // glBufferData(GL_PIXEL_UNPACK_BUFFER, size_t(width) * height * 4, nullptr, GL_DYNAMIC_DRAW); // opengl buffer for rgba image
-        // glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
-        // if (cudaGraphicsGLRegisterBuffer(&resource_, pbo_, cudaGraphicsRegisterFlagsWriteDiscard)
-        //     != cudaSuccess) {
-        //     glDeleteBuffers(1, &pbo_);
-        //     glfwTerminate();
-        //     throw std::runtime_error("cudaGraphicsGLRegisterBuffer failed");
-        // }
-
-        // glGenTextures(1, &texture_);
-        // glBindTexture(GL_TEXTURE_2D, texture_);
-        // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
         int fbWidth, fbHeight;
         glfwGetFramebufferSize(window_, &fbWidth, &fbHeight);
         createBuffers(fbWidth, fbHeight);
@@ -125,10 +110,18 @@ void main() { color = texture(image, uv); }
             throw std::runtime_error("shader program link failed");
 
         glGenVertexArrays(1, &vao_);
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGui_ImplGlfw_InitForOpenGL(window_, true);
+        ImGui_ImplOpenGL3_Init("#version 330");
     }
 
     Window::~Window()
     {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
         destroyBuffers();
         glDeleteVertexArrays(1, &vao_);
         glDeleteProgram(program_);
@@ -223,6 +216,13 @@ void main() { color = texture(image, uv); }
 
         input_.scroll = scrollAccum_;
         scrollAccum_ = 0.f;
+
+        if (ImGui::GetIO().WantCaptureMouse)
+        {
+            input_.orbiting = false;
+            input_.panning = false;
+            input_.scroll = 0.f;
+        }
     }
 
     void Window::present()
@@ -230,6 +230,7 @@ void main() { color = texture(image, uv); }
         if (minimized())
         {
             readInput();
+            ImGui::Render();
             return;
         }
 
@@ -243,8 +244,18 @@ void main() { color = texture(image, uv); }
         glViewport(0, 0, width_, height_);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
         glfwSwapBuffers(window_);
         readInput();
+    }
+
+    void Window::beginUi()
+    {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
     }
 
 }
