@@ -16,6 +16,7 @@ public:
     std::vector<Vec3> forces() const { return forces_.download(); }
     std::vector<Contact> contacts();
     std::vector<uint32_t> render(int width = 800, int height = 600, int samples = 4);
+    void renderTo(uint32_t* devicePixels, int width = 800, int height = 600, int samples = 4);
 
     Settings settings;
     Response response;
@@ -23,6 +24,7 @@ public:
     int steps = 0;
 
 private:
+    Camera camera() const;
     DeviceBuffer<Particle> particles_;
     DeviceBuffer<Vec3> forces_, oldAccelerations_;
     std::unique_ptr<OptixBackend> backend_;

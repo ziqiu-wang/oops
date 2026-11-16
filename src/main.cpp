@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include "Window.h"
 
 using namespace oops;
 
@@ -13,6 +14,7 @@ namespace {
 void help() {
     std::cout <<
         "Mochi sphere simulation (CUDA + OptiX)\n"
+        "  --live [--display-every N]  Show the simulation in a window (default N = 50)\n"
         "  --input FILE                x y z radius mass [vx vy vz]\n"
         "  --particles N --scene mixed|uniform|clustered --seed N\n"
         "  --save-input FILE           Export the generated/input scene\n"
@@ -44,6 +46,10 @@ int main(int argc, char** argv) {
         std::string input, saveInput, snapshot, image, timingFile;
         std::string scene = "mixed", renderDir = "build/frames";
         std::string stateDir = "build/states";
+        // for live output
+        bool live = false;
+        int displayEvery = 50;
+        // original vars
         int count = 4096, steps = 1000, warmup = 0, rebuildEvery = 0, renderEvery = 0;
         int stateEvery = 0;
         unsigned seed = 1;
@@ -85,9 +91,12 @@ int main(int argc, char** argv) {
             else if (option == "--validate") validate = true;
             else if (option == "--morton") morton = true;
             else if (option == "--strict-upstream") settings.strictUpstream = true;
+            // for live
+            else if (option == "--live") live = true;
+            else if (option == "--display-every") displayEvery = std::stoi(value());
             else throw std::runtime_error("Unknown option: " + option);
         }
-        if (count < 1 || steps < 0 || warmup < 0 || rebuildEvery < 0 || renderEvery < 0 || stateEvery < 0
+        if (count < 1 || steps < 0 || warmup < 0 || rebuildEvery < 0 || renderEvery < 0 || stateEvery < 0 || displayEvery < 1
             || !(settings.dt > 0.f) || !(settings.stiffness > 0.f)
             || !(settings.restitution >= 0.f && settings.restitution <= 1.f))
             throw std::runtime_error("Invalid particle count, timestep, or simulation parameter.");
@@ -122,24 +131,46 @@ int main(int argc, char** argv) {
             for (int i = 0; i < warmup; ++i) simulation.step(rebuildEvery);
             simulation.timings = {};
             auto start = std::chrono::steady_clock::now();
-            for (int i = 0; i < steps; ++i) {
-                simulation.step(rebuildEvery);
-                if (stateEvery && (i + 1) % stateEvery == 0) {
+            int stepCount = 0;
+
+            auto afterStep = [&]() {
+                ++stepCount;
+                if (stateEvery && stepCount % stateEvery == 0) {
                     std::filesystem::create_directories(stateDir);
-                    saveScene(stateDir + "/state_" + std::to_string(i + 1) + ".txt",
+                    saveScene(stateDir + "/state_" + std::to_string(stepCount) + ".txt",
                               simulation.particles());
                 }
-                if (renderEvery && (i + 1) % renderEvery == 0) {
+                if (renderEvery && stepCount % renderEvery == 0) {
                     std::filesystem::create_directories(renderDir);
-                    writeImage(renderDir + "/frame_" + std::to_string(i + 1) + ".png",
+                    writeImage(renderDir + "/frame_" + std::to_string(stepCount) + ".png",
                                800, 600, simulation.render());
                 }
+            };
+
+            if (live) {
+                Window window(800, 600, "mochi");
+                while (!window.shouldClose()) {
+                    for (int i = 0; i < displayEvery; ++i) {
+                        simulation.step(rebuildEvery);
+                        afterStep();
+                    }
+                    uint32_t* pixels = window.map();
+                    simulation.renderTo(pixels, 800, 600);
+                    window.unmap();
+                    window.present();
+                }
+            } else {
+                for (int i = 0; i < steps; ++i) {
+                    simulation.step(rebuildEvery);
+                    afterStep();
+                }
             }
+
             double total = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - start).count();
             if (steps == 0 && warmup == 0) simulation.computeForces();
             const auto& t = simulation.timings;
-            std::cout << initial.size() << " particles, " << steps << " measured steps\n"
+            std::cout << initial.size() << " particles, " << stepCount << " measured steps\n"
                       << "accel=" << t.accel << " query=" << t.query << " response=" << t.response
                       << " integrate=" << t.integrate << " wall=" << total << " ms\n";
             if (!timingFile.empty()) {
@@ -147,7 +178,7 @@ int main(int argc, char** argv) {
                 std::ofstream csv(timingFile);
                 if (!csv) throw std::runtime_error("Could not write timings: " + timingFile);
                 csv << "particles,steps,accel_ms,query_ms,response_ms,integrate_ms,wall_ms\n"
-                    << initial.size() << ',' << steps << ',' << t.accel << ',' << t.query << ','
+                    << initial.size() << ',' << stepCount << ',' << t.accel << ',' << t.query << ','
                     << t.response << ',' << t.integrate << ',' << total << '\n';
             }
         }

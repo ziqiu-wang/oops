@@ -64,7 +64,7 @@ std::vector<Contact> Simulation::contacts() {
     return backend_->contacts();
 }
 
-std::vector<uint32_t> Simulation::render(int width, int height, int samples) {
+Camera Simulation::camera() const {
     float scale = settings.boxWidth > 0.f ? settings.boxWidth : 1.f;
     Vec3 target = scale * Vec3(0.5f, 0.35f, 0.5f);
     Vec3 origin = scale * Vec3(1.8f, 1.35f, 1.95f);
@@ -72,8 +72,15 @@ std::vector<uint32_t> Simulation::render(int width, int height, int samples) {
     Vec3 right = normalize(cross(forward, Vec3(0.f, 1.f, 0.f)));
     Vec3 up = cross(right, forward);
     float halfFov = 0.45f;
-    return backend_->render({origin, forward, right * halfFov, up * halfFov},
-                             width, height, samples);
+    return {origin, forward, right * halfFov, up * halfFov};
+}
+
+std::vector<uint32_t> Simulation::render(int width, int height, int samples) {
+    return backend_->render(camera(), width, height, samples);
+}
+
+void Simulation::renderTo(uint32_t* devicePixels, int width, int height, int samples) {
+    backend_->renderTo(camera(), devicePixels, width, height, samples);
 }
 
 } // namespace oops

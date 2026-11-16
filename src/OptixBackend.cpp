@@ -107,13 +107,18 @@ std::vector<Contact> OptixBackend::contacts() const {
     return result;
 }
 
-std::vector<uint32_t> OptixBackend::render(const Camera& camera, int width,
-                                          int height, int samples) {
-    if (pixels_.size() != size_t(width) * height) pixels_.resize(size_t(width) * height);
-    launch_.pixels = pixels_.data();
+void OptixBackend::renderTo(const Camera& camera, uint32_t* devicePixels,
+                            int width, int height, int samples) {
+    launch_.pixels = devicePixels;
     launch_.camera = camera;
     launch_.samples = samples;
     impl_->run(impl_->image, launch_, width, height);
+}
+
+std::vector<uint32_t> OptixBackend::render(const Camera& camera, int width,
+                                          int height, int samples) {
+    if (pixels_.size() != size_t(width) * height) pixels_.resize(size_t(width) * height);
+    renderTo(camera, pixels_.data(), width, height, samples);
     return pixels_.download();
 }
 

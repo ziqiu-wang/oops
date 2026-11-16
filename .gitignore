@@ -10,6 +10,7 @@ CTestTestfile.cmake
 install_manifest.txt
 compile_commands.json
 CMakeUserPresets.json
+CMakePresets.json
 
 # Compiled C/C++ and CUDA/OptiX artifacts
 *.o
@@ -34,6 +35,7 @@ CMakeUserPresets.json
 
 # Visual Studio and other local IDE state
 .vs/
+.vscode/
 .idea/
 *.suo
 *.user

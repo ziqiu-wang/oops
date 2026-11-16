@@ -11,6 +11,28 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 add_subdirectory(external/owl EXCLUDE_FROM_ALL)
 find_package(CUDAToolkit REQUIRED)
 
+include(FetchContent)
+find_package(OpenGL REQUIRED)
+
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG 3.4)
+
+set(ONLY_LIBS ON CACHE BOOL "" FORCE)
+set(glew-cmake_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(glew
+    GIT_REPOSITORY https://github.com/Perlmint/glew-cmake.git
+    GIT_TAG glew-cmake-2.2.0)
+
+FetchContent_MakeAvailable(glfw glew)
+
+add_executable(test_the_glfw tests/test_the_glfw.cpp)
+target_link_libraries(test_the_glfw PRIVATE glfw libglew_static OpenGL::GL)
+
 add_library(oops_common src/Scene.cpp src/Reference.cpp)
 target_include_directories(oops_common PUBLIC src external/owl/include)
 
@@ -21,8 +43,15 @@ embed_ptx(OUTPUT_TARGET mochi_ptx
 add_library(oops_gpu src/OptixBackend.cpp src/Granular.cu src/Simulation.cpp src/Render.cpp)
 target_link_libraries(oops_gpu PUBLIC oops_common owl::owl CUDA::cudart PRIVATE mochi_ptx stb_image)
 
+add_library(oops_window src/Window.cpp)
+target_include_directories(oops_window PUBLIC src)
+target_link_libraries(oops_window PUBLIC glfw libglew_static OpenGL::GL CUDA::cudart)
+
+add_executable(test_window tests/test_window.cpp)
+target_link_libraries(test_window PRIVATE oops_window)
+
 add_executable(mochi src/main.cpp)
-target_link_libraries(mochi PRIVATE oops_gpu)
+target_link_libraries(mochi PRIVATE oops_gpu oops_window)
 
 include(CTest)
 if(BUILD_TESTING)
