@@ -1,6 +1,8 @@
 #include "Granular.h"
 #include "CudaBuffer.h"
 
+#define SYNC_KERNELS 0 // for speed improvements with default stream, no sync needed
+
 namespace oops {
 
 __global__ void resetKernel(Particle* particles, Vec3* forces, int count, Vec3 gravity) {
@@ -33,7 +35,9 @@ __global__ void integrateKernel(Particle* particles, Vec3* forces, Vec3* previou
 void resetForces(Particle* particles, Vec3* forces, int count, Vec3 gravity) {
     resetKernel<<<(count + 255) / 256, 256>>>(particles, forces, count, gravity);
     cudaCheck(cudaGetLastError());
+#if SYNC_KERNELS
     cudaCheck(cudaDeviceSynchronize());
+#endif
 }
 
 void applyContacts(Particle* particles, Vec3* forces, const Contact* contacts,
@@ -42,14 +46,18 @@ void applyContacts(Particle* particles, Vec3* forces, const Contact* contacts,
     responseKernel<<<(count + 255) / 256, 256>>>(particles, forces, contacts, count,
                                                contactParameters(settings));
     cudaCheck(cudaGetLastError());
+#if SYNC_KERNELS
     cudaCheck(cudaDeviceSynchronize());
+#endif
 }
 
 void integrate(Particle* particles, Vec3* forces, Vec3* previous,
                int count, const Settings& settings) {
     integrateKernel<<<(count + 255) / 256, 256>>>(particles, forces, previous, count, settings);
     cudaCheck(cudaGetLastError());
+#if SYNC_KERNELS
     cudaCheck(cudaDeviceSynchronize());
+#endif
 }
 
 } // namespace oops
