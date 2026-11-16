@@ -35,8 +35,8 @@ namespace oops
 
     void Simulation::computeForces()
     {
-        syncIf(profile);
         resetForces(particles_.data(), forces_.data(), int(particles_.size()), settings.gravity);
+        syncIf(profile);
         auto start = Clock::now();
         if (response == Response::Fused)
         {
