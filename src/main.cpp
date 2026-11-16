@@ -156,9 +156,10 @@ int main(int argc, char** argv) {
                         afterStep();
                     }
                     orbit.update(window.input());
-                    uint32_t* pixels = window.map();
-                    simulation.renderTo(pixels, orbit.camera(), 800, 600);
-                    window.unmap();
+                    if (uint32_t* pixels = window.map()) {
+                        simulation.renderTo(pixels, orbit.camera(), window.width(), window.height());
+                        window.unmap();
+                    }
                     window.present();
                 }
             } else {
