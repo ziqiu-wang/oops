@@ -1,5 +1,6 @@
 #include "Simulation.h"
 #include "Granular.h"
+#include <cuda_runtime.h>
 #include <chrono>
 
 namespace oops
@@ -10,6 +11,12 @@ namespace oops
         double elapsed(Clock::time_point start)
         {
             return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        }
+
+        void syncIf(bool on)
+        {
+            if (on)
+                cudaDeviceSynchronize();
         }
     }
 
@@ -28,19 +35,23 @@ namespace oops
 
     void Simulation::computeForces()
     {
+        syncIf(profile);
         resetForces(particles_.data(), forces_.data(), int(particles_.size()), settings.gravity);
         auto start = Clock::now();
         if (response == Response::Fused)
         {
             backend_->accumulateForces(forces_.data(), settings);
+            syncIf(profile);
             timings.query += elapsed(start);
         }
         else
         {
             unsigned count = backend_->findContacts(settings);
+            syncIf(profile);
             timings.query += elapsed(start);
             start = Clock::now();
             applyContacts(particles_.data(), forces_.data(), backend_->deviceContacts(), count, settings);
+            syncIf(profile);
             timings.response += elapsed(start);
         }
     }
@@ -50,10 +61,12 @@ namespace oops
         auto start = Clock::now();
         integrate(particles_.data(), forces_.data(), oldAccelerations_.data(),
                   int(particles_.size()), settings);
+        syncIf(profile);
         timings.integrate += elapsed(start);
         ++steps;
         start = Clock::now();
         backend_->update(rebuildEvery > 0 && steps % rebuildEvery == 0);
+        syncIf(profile);
         timings.accel += elapsed(start);
         computeForces();
     }

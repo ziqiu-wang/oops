@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <imgui.h>
+#include <cuda_runtime.h>
 #include "Window.h"
 #include "Panel.h" // for custom imgui
 
@@ -42,6 +42,11 @@ void parentDirectory(const std::string& path) {
 }
 
 int main(int argc, char** argv) {
+    using Clock = std::chrono::steady_clock;
+    auto ms = [](Clock::time_point a, Clock::time_point b) {
+        return std::chrono::duration<float, std::milli>(b - a).count();
+    };
+    auto smooth = [](float& value, float sample) { value = 0.9f * value + 0.1f * sample; };
     try {
         Settings settings;
         Response response = Response::Contacts;
@@ -158,16 +163,39 @@ int main(int argc, char** argv) {
                     window.beginUi();
                     drawPanel(simulation, panel);
                     window.setLeftInset(panelInset(panel));
-                    for (int i = 0; i < displayEvery; ++i) {
+                    simulation.profile = panel.profilePhases;
+                    Timings before = simulation.timings;
+                    auto t0 = Clock::now();
+                    int stepsThisFrame = panel.displayEvery;
+                    for (int i = 0; i < stepsThisFrame; ++i) {
                         simulation.step(rebuildEvery);
                         afterStep();
                     }
+                    if (panel.advancedStats) cudaDeviceSynchronize();
+                    auto t1 = Clock::now();
                     orbit.update(window.input());
                     if (uint32_t* pixels = window.map()) {
                         simulation.renderTo(pixels, orbit.camera(), window.width(), window.height());
                         window.unmap();
                     }
+                    auto t2 = Clock::now();
                     window.present();
+                    auto t3 = Clock::now();
+                    if (panel.advancedStats) {
+                        smooth(panel.physicsMs, ms(t0, t1));
+                        smooth(panel.renderMs, ms(t1, t2));
+                        smooth(panel.presentMs, ms(t2, t3));
+                        panel.frameHistory[panel.historyIndex] = ms(t0, t3);
+                        panel.historyIndex = (panel.historyIndex + 1) % 120;
+                        if (stepsThisFrame > 0) {
+                            const Timings& now = simulation.timings;
+                            float n = float(stepsThisFrame);
+                            smooth(panel.accelMs, float(now.accel - before.accel) / n);
+                            smooth(panel.queryMs, float(now.query - before.query) / n);
+                            smooth(panel.responseMs, float(now.response - before.response) / n);
+                            smooth(panel.integrateMs, float(now.integrate - before.integrate) / n);
+                        }
+                    }
                 }
             } else {
                 for (int i = 0; i < steps; ++i) {

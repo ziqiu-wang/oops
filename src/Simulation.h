@@ -25,6 +25,8 @@ public:
     Timings timings;
     int steps = 0;
 
+    bool profile = false;
+
 private:
     DeviceBuffer<Particle> particles_;
     DeviceBuffer<Vec3> forces_, oldAccelerations_;
