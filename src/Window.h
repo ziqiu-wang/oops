@@ -40,6 +40,7 @@ namespace oops
         bool minimized() const { return width_ == 0 || height_ == 0; }
 
         void beginUi();
+        void setLeftInset(int pixels) { leftInset_ = pixels; }
 
     private:
         int width_, height_;
@@ -54,8 +55,9 @@ namespace oops
 
         void createBuffers(int width, int height);
         void destroyBuffers();
-        int pendingWidth_ = 0, pendingHeight_ = 0;
-        bool resized_ = false;
+
+        int fbWidth_ = 0, fbHeight_ = 0;
+        int leftInset_ = 0;
     };
 
 }

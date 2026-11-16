@@ -8,6 +8,7 @@
 #include <iostream>
 #include <imgui.h>
 #include "Window.h"
+#include "Panel.h" // for custom imgui
 
 using namespace oops;
 
@@ -151,9 +152,12 @@ int main(int argc, char** argv) {
             if (live) {
                 Window window(800, 600, "mochi");
                 OrbitCamera orbit = simulation.defaultCamera();
+                PanelState panel;
+                panel.displayEvery = displayEvery;
                 while (!window.shouldClose()) {
                     window.beginUi();
-                    ImGui::ShowDemoWindow();
+                    drawPanel(simulation, panel);
+                    window.setLeftInset(panelInset(panel));
                     for (int i = 0; i < displayEvery; ++i) {
                         simulation.step(rebuildEvery);
                         afterStep();

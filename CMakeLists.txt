@@ -59,11 +59,15 @@ add_library(oops_window src/Window.cpp)
 target_include_directories(oops_window PUBLIC src)
 target_link_libraries(oops_window PUBLIC glfw libglew_static OpenGL::GL CUDA::cudart imgui)
 
+add_library(oops_panel src/Panel.cpp)
+target_include_directories(oops_panel PUBLIC src)
+target_link_libraries(oops_panel PUBLIC oops_gpu imgui)
+
 add_executable(test_window tests/test_window.cpp)
 target_link_libraries(test_window PRIVATE oops_window)
 
 add_executable(mochi src/main.cpp)
-target_link_libraries(mochi PRIVATE oops_gpu oops_window)
+target_link_libraries(mochi PRIVATE oops_gpu oops_window oops_panel)
 
 include(CTest)
 if(BUILD_TESTING)

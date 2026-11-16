@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <algorithm>
 #include "Window.h"
 
 namespace oops
@@ -85,16 +86,13 @@ void main() { color = texture(image, uv); }
                               { static_cast<Window *>(glfwGetWindowUserPointer(w))->scrollAccum_ += float(dy); });
         glfwGetCursorPos(window_, &lastX_, &lastY_);
 
-        glfwSetFramebufferSizeCallback(window_, [](GLFWwindow *w, int width, int height)
-                                       {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w));
-        self->pendingWidth_ = width;
-        self->pendingHeight_ = height;
-        self->resized_ = true; });
+        glfwSetFramebufferSizeCallback(window_, [](GLFWwindow *w, int width, int height) { 
+            auto *self = static_cast<Window *>(glfwGetWindowUserPointer(w)); 
+            self->fbWidth_ = width; 
+            self->fbHeight_ = height; 
+        });
 
-        int fbWidth, fbHeight;
-        glfwGetFramebufferSize(window_, &fbWidth, &fbHeight);
-        createBuffers(fbWidth, fbHeight);
+        glfwGetFramebufferSize(window_, &fbWidth_, &fbHeight_);
 
         GLuint vs = compileShader(GL_VERTEX_SHADER, vertexSource);
         GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
@@ -170,15 +168,14 @@ void main() { color = texture(image, uv); }
 
     uint32_t *Window::map()
     {
-        if (resized_)
+        int wantWidth = std::max(0, fbWidth_ - leftInset_);
+        int wantHeight = fbHeight_;
+        if (wantWidth != width_ || wantHeight != height_ || !pbo_)
         {
-            resized_ = false;
-            if (pendingWidth_ != width_ || pendingHeight_ != height_)
-            {
-                destroyBuffers();
-                createBuffers(pendingWidth_, pendingHeight_);
-            }
+            destroyBuffers();
+            createBuffers(wantWidth, wantHeight);
         }
+
         if (minimized())
         {
             return nullptr;
@@ -234,6 +231,10 @@ void main() { color = texture(image, uv); }
             return;
         }
 
+        glViewport(0, 0, fbWidth_, fbHeight_);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
         glBindTexture(GL_TEXTURE_2D, texture_);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -241,7 +242,7 @@ void main() { color = texture(image, uv); }
 
         glUseProgram(program_);
         glBindVertexArray(vao_);
-        glViewport(0, 0, width_, height_);
+        glViewport(leftInset_, 0, width_, height_);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
         ImGui::Render();
