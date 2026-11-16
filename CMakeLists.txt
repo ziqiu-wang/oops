@@ -30,9 +30,6 @@ FetchContent_Declare(glew
 
 FetchContent_MakeAvailable(glfw glew)
 
-add_executable(test_the_glfw tests/test_the_glfw.cpp)
-target_link_libraries(test_the_glfw PRIVATE glfw libglew_static OpenGL::GL)
-
 add_library(oops_common src/Scene.cpp src/Reference.cpp)
 target_include_directories(oops_common PUBLIC src external/owl/include)
 

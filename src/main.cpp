@@ -149,13 +149,15 @@ int main(int argc, char** argv) {
 
             if (live) {
                 Window window(800, 600, "mochi");
+                OrbitCamera orbit = simulation.defaultCamera();
                 while (!window.shouldClose()) {
                     for (int i = 0; i < displayEvery; ++i) {
                         simulation.step(rebuildEvery);
                         afterStep();
                     }
+                    orbit.update(window.input());
                     uint32_t* pixels = window.map();
-                    simulation.renderTo(pixels, 800, 600);
+                    simulation.renderTo(pixels, orbit.camera(), 800, 600);
                     window.unmap();
                     window.present();
                 }

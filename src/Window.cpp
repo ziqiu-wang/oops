@@ -70,6 +70,12 @@ height_(height) {
     }
 
     glfwSwapInterval(0);
+    glfwSetWindowUserPointer(window_, this);
+    glfwSetScrollCallback(window_, [](GLFWwindow* w, double, double dy) {
+        static_cast<Window*>(glfwGetWindowUserPointer(w))->scrollAccum_ += float(dy);
+    });
+    glfwGetCursorPos(window_, &lastX_, &lastY_);
+
 
     glGenBuffers(1, &pbo_);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
@@ -142,6 +148,20 @@ void Window::present() {
 
     glfwSwapBuffers(window_);
     glfwPollEvents();
+
+    input_.orbiting = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT)  == GLFW_PRESS;
+    input_.panning  = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+    double x, y;
+    glfwGetCursorPos(window_, &x, &y);
+    input_.mouseDx = float(x - lastX_);
+    input_.mouseDy = float(y - lastY_);
+    lastX_ = x;
+    lastY_ = y;
+
+    input_.scroll = scrollAccum_;
+    scrollAccum_ = 0.f;
+
 }
 
 }
