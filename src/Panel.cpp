@@ -58,6 +58,9 @@ namespace oops
             ImGui::Text("Physics: %.2f ms", state.physicsMs);
             ImGui::Text("Render:  %.2f ms", state.renderMs);
             ImGui::Text("UI+present: %.2f ms", state.presentMs);
+            // ImGui::Text("Steps this frame: %d", state.stepsThisFrame);
+            // ImGui::Text("Steps/s: %.0f", state.stepsPerSecond);
+            ImGui::Text("Real-time: %.2fx", state.realtimeFactor);
             ImGui::PlotLines("Frame ms", state.frameHistory, 120, state.historyIndex,
                              nullptr, 0.f, 50.f, ImVec2(0, 60));
             ImGui::Checkbox("Profile phases (slower)", &state.profilePhases);

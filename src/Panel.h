@@ -19,6 +19,10 @@ namespace oops
         int stepsThisFrame = 0;
         float frameHistory[120] = {};
         int historyIndex = 0;
+
+        // more stats
+        float stepsPerSecond = 0.f;
+        float realtimeFactor = 0.f;
     };
 
     void drawPanel(Simulation &simulation, PanelState &state);
