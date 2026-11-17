@@ -1,0 +1,116 @@
+#include "Panel.h"
+#include <imgui.h>
+
+namespace oops
+{
+
+    namespace
+    {
+        void drawFpsOverlay()
+        {
+            const ImGuiViewport *vp = ImGui::GetMainViewport();
+            const float pad = 10.f;
+            ImVec2 pos(vp->WorkPos.x + vp->WorkSize.x - pad, vp->WorkPos.y + pad);
+            ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1.f, 0.f));
+            ImGui::SetNextWindowBgAlpha(0.35f);
+            ImGui::Begin("##fps", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+            ImGui::Text("%.1f fps", ImGui::GetIO().Framerate);
+            ImGui::End();
+        }
+    }
+
+    void drawPanel(Simulation &simulation, PanelState &state)
+    {
+        // pausing from space regardless of open
+        if (!ImGui::GetIO().WantCaptureKeyboard && ImGui::IsKeyPressed(ImGuiKey_Space, false))
+        {
+            state.paused = !state.paused;
+        }
+        // fps at top right
+        if (state.showFps)
+        {
+            drawFpsOverlay();
+        }
+        const ImGuiViewport *vp = ImGui::GetMainViewport();
+        const ImGuiWindowFlags fixed = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+
+        if (!state.open)
+        {
+            ImGui::SetNextWindowPos(vp->WorkPos, ImGuiCond_Always);
+            ImGui::Begin("##expand", nullptr, fixed | ImGuiWindowFlags_AlwaysAutoResize);
+            if (ImGui::Button(">>"))
+                state.open = true;
+            ImGui::End();
+            return;
+        }
+
+        ImGui::SetNextWindowPos(vp->WorkPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(state.width, vp->WorkSize.y), ImGuiCond_Always);
+        ImGui::Begin("Settings", nullptr, fixed);
+        if (ImGui::Button("<<"))
+            state.open = false;
+        ImGui::SameLine();
+        ImGui::TextUnformatted("Settings");
+        ImGui::Separator();
+
+        // playback buttons
+        ImGui::SeparatorText("Playback");
+        if (ImGui::Button(state.paused ? "Play" : "Pause", ImVec2(60, 0)))
+            state.paused = !state.paused;
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!state.paused);
+        if (ImGui::Button("Next frame"))
+            state.stepOnce = true;
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Reset"))
+            state.resetRequested = true;
+
+        ImGui::SliderInt("Steps/frame", &state.displayEvery, 1, 500, "%d", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::Text("Sim time: %.3f s", simulation.steps * simulation.settings.dt);
+
+        ImGui::SeparatorText("Record");
+        if (ImGui::Button(state.recording ? "Stop" : "Record", ImVec2(60, 0)))
+            state.recording = !state.recording;
+        if (state.recording)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "REC  %d frames", state.recordedFrames);
+        }
+
+        // stat buttons
+        ImGui::Checkbox("Show FPS", &state.showFps);
+        ImGui::Checkbox("Advanced stats", &state.advancedStats);
+        if (state.advancedStats)
+        {
+            ImGui::Indent();
+            ImGui::Text("Physics: %.2f ms", state.physicsMs);
+            ImGui::Text("Render:  %.2f ms", state.renderMs);
+            ImGui::Text("UI+present: %.2f ms", state.presentMs);
+            // ImGui::Text("Steps this frame: %d", state.stepsThisFrame);
+            // ImGui::Text("Steps/s: %.0f", state.stepsPerSecond);
+            ImGui::Text("Real-time: %.2fx", state.realtimeFactor);
+            ImGui::PlotLines("Frame ms", state.frameHistory, 120, state.historyIndex,
+                             nullptr, 0.f, 50.f, ImVec2(0, 60));
+            ImGui::Checkbox("Profile phases (slower)", &state.profilePhases);
+            if (state.profilePhases)
+            {
+                ImGui::Text("Per step: accel %.3f", state.accelMs);
+                ImGui::Text("          query %.3f", state.queryMs);
+                ImGui::Text("          response %.3f", state.responseMs);
+                ImGui::Text("          integrate %.3f", state.integrateMs);
+            }
+            else
+            {
+                ImGui::TextDisabled("(enable to measure per-step phases)");
+            }
+            ImGui::Unindent();
+        }
+
+        ImGui::End();
+    }
+
+}
