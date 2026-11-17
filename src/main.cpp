@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <cuda_runtime.h>
+#include <cstdio>
 #include "Window.h"
 #include "Panel.h" // for custom imgui
 
@@ -217,15 +218,40 @@ int main(int argc, char **argv)
                 OrbitCamera orbit = simulation.defaultCamera();
                 PanelState panel;
                 panel.displayEvery = displayEvery;
+                // ----- recording vars
+                std::string recordDir;
+                bool wasRecording = false;
+                std::vector<uint32_t> frame;
+                // -----
                 while (!window.shouldClose())
                 {
                     window.beginUi();
                     drawPanel(simulation, panel);
                     window.setLeftInset(panelInset(panel));
                     simulation.profile = panel.profilePhases;
+                    if (panel.resetRequested)
+                    {
+                        simulation.upload(initial);
+                        stepCount = 0;
+                        panel.resetRequested = false;
+                    }
+                    if (panel.recording && !wasRecording)
+                    {
+                        int take = 1;
+                        while (std::filesystem::exists("out/recordings/take_" + std::to_string(take)))
+                            ++take;
+                        recordDir = "out/recordings/take_" + std::to_string(take);
+                        std::filesystem::create_directories(recordDir);
+                        panel.recordedFrames = 0;
+                    }
+                    wasRecording = panel.recording;
+
                     Timings before = simulation.timings;
-                    auto t0 = Clock::now();
-                    int stepsThisFrame = panel.displayEvery;
+                    auto t0 = Clock::now(); // start of physics time
+                    // int stepsThisFrame = panel.paused ? (panel.stepOnce ? 1 : 0) : panel.displayEvery;
+                    int stepsThisFrame = panel.paused ? (panel.stepOnce ? panel.displayEvery : 0) : panel.displayEvery; // one frame instead of 1 physics step
+                    panel.stepOnce = false;
+
                     for (int i = 0; i < stepsThisFrame; ++i)
                     {
                         simulation.step(rebuildEvery);
@@ -236,11 +262,18 @@ int main(int argc, char **argv)
                         cudaDeviceSynchronize();
                     }
                     panel.stepsThisFrame = stepsThisFrame;
-                    auto t1 = Clock::now();
+                    auto t1 = Clock::now(); // end of physics time
                     orbit.update(window.input());
                     if (uint32_t *pixels = window.map())
                     {
                         simulation.renderTo(pixels, orbit.camera(), window.width(), window.height());
+                        if (panel.recording) {
+                            frame.resize(size_t(window.width()) * window.height());
+                            cudaMemcpy(frame.data(), pixels, frame.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+                            char name[32];
+                            std::snprintf(name, sizeof(name), "/frame_%05d.png", panel.recordedFrames++);
+                            writeImage(recordDir + name, window.width(), window.height(), frame);
+                        }                   
                         window.unmap();
                     }
                     auto t2 = Clock::now();

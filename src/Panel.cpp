@@ -24,6 +24,12 @@ namespace oops
 
     void drawPanel(Simulation &simulation, PanelState &state)
     {
+        // pausing from space regardless of open
+        if (!ImGui::GetIO().WantCaptureKeyboard && ImGui::IsKeyPressed(ImGuiKey_Space, false))
+        {
+            state.paused = !state.paused;
+        }
+        // fps at top right
         if (state.showFps)
         {
             drawFpsOverlay();
@@ -50,6 +56,32 @@ namespace oops
         ImGui::TextUnformatted("Settings");
         ImGui::Separator();
 
+        // playback buttons
+        ImGui::SeparatorText("Playback");
+        if (ImGui::Button(state.paused ? "Play" : "Pause", ImVec2(60, 0)))
+            state.paused = !state.paused;
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!state.paused);
+        if (ImGui::Button("Next frame"))
+            state.stepOnce = true;
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Reset"))
+            state.resetRequested = true;
+
+        ImGui::SliderInt("Steps/frame", &state.displayEvery, 1, 500, "%d", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::Text("Sim time: %.3f s", simulation.steps * simulation.settings.dt);
+
+        ImGui::SeparatorText("Record");
+        if (ImGui::Button(state.recording ? "Stop" : "Record", ImVec2(60, 0)))
+            state.recording = !state.recording;
+        if (state.recording)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "REC  %d frames", state.recordedFrames);
+        }
+
+        // stat buttons
         ImGui::Checkbox("Show FPS", &state.showFps);
         ImGui::Checkbox("Advanced stats", &state.advancedStats);
         if (state.advancedStats)

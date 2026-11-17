@@ -23,6 +23,13 @@ namespace oops
         // more stats
         float stepsPerSecond = 0.f;
         float realtimeFactor = 0.f;
+
+        // playback tools
+        bool paused = false;
+        bool stepOnce = false;
+        bool resetRequested = false;
+        bool recording = false;
+        int recordedFrames = 0;
     };
 
     void drawPanel(Simulation &simulation, PanelState &state);
