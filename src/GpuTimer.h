@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <stdexcept>
 #include <string>
 
 // instead of using CPU timer (need to synchronize GPU events to measure)

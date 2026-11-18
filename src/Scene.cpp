@@ -15,13 +15,22 @@ std::vector<Particle> makeScene(int count, const std::string& kind, unsigned see
     std::uniform_real_distribution<float> uniform(0.f, 1.f);
     int side = int(std::ceil(std::cbrt(double(count))));
     float cell = 0.7f / side;
+    if (kind == "column") {
+        side = int(std::ceil(std::cbrt(double(count) / 3.)));
+        cell = 0.26f / side;
+    }
     std::vector<Particle> particles(count);
     for (int i = 0; i < count; ++i) {
         Vec3 grid(float(i % side), float((i / side) % side), float(i / (side * side)));
         Vec3 jitter(uniform(random) - 0.5f, uniform(random) - 0.5f, uniform(random) - 0.5f);
         auto& p = particles[i];
         p.position = Vec3(0.15f, 0.25f, 0.15f) + cell * (grid + Vec3(0.5f) + 0.15f * jitter);
+        if (kind == "column") {
+            grid = Vec3(float(i % side), float(i / (side * side)), float((i / side) % side));
+            p.position = Vec3(0.37f, 0.005f, 0.37f) + cell * (grid + Vec3(0.5f) + 0.03f * jitter);
+        }
         p.radius = cell * (kind == "mixed" ? 0.15f + 0.45f * uniform(random) : 0.4f);
+        if (kind == "column") p.radius = cell * 0.46f;
         if (kind == "clustered") p.position = Vec3(0.5f) + 0.5f * (p.position - Vec3(0.5f));
         p.mass = 2500.f * (4.f / 3.f) * 3.14159265358979323846f
             * p.radius * p.radius * p.radius;

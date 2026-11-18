@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.h"
+#include <cmath>
 
 namespace oops {
 
@@ -39,10 +40,11 @@ inline __both__ void integrateParticle(Particle& p, Vec3 force, Vec3& oldAcceler
 
     if (settings.boxWidth <= 0.f) return;
     for (int axis = 0; axis < 3; ++axis) {
-        if (p.position[axis] - p.radius < 0.f) {
+        if ((settings.walls & (1u << (2 * axis))) && p.position[axis] - p.radius < 0.f) {
             p.position[axis] = p.radius;
             p.velocity[axis] *= -settings.wallRestitution;
-        } else if (p.position[axis] + p.radius - settings.boxWidth > 0.f) {
+        } else if ((settings.walls & (1u << (2 * axis + 1)))
+                   && p.position[axis] + p.radius - settings.boxWidth > 0.f) {
             p.position[axis] = settings.boxWidth - p.radius;
             p.velocity[axis] *= -settings.wallRestitution;
         }

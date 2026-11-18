@@ -13,9 +13,12 @@ struct OptixBackend::Impl {
     OWLGroup geometryGroup, world;
     OWLRayGen query, image;
     OWLParams params;
+    cudaEvent_t cudaReady, accelReady;
 
     Impl(Particle* particles, int count) {
         context = owlContextCreate(nullptr, 1);
+        cudaCheck(cudaEventCreateWithFlags(&cudaReady, cudaEventDisableTiming));
+        cudaCheck(cudaEventCreateWithFlags(&accelReady, cudaEventDisableTiming));
         owlContextSetRayTypeCount(context, 2);
         OWLModule module = owlModuleCreate(context, OptixPrograms_ptx);
         OWLVarDecl geometryVars[] = {
@@ -49,7 +52,11 @@ struct OptixBackend::Impl {
         owlBuildPipeline(context);
         owlBuildSBT(context);
     }
-    ~Impl() { owlContextDestroy(context); }
+    ~Impl() {
+        owlContextDestroy(context);
+        cudaEventDestroy(cudaReady);
+        cudaEventDestroy(accelReady);
+    }
 
     void run(OWLRayGen program, const LaunchData& data, int width, int height) {
         owlParamsSetRaw(params, "data", &data);
@@ -65,6 +72,21 @@ OptixBackend::OptixBackend(Particle* particles, int count, unsigned capacity)
 }
 
 OptixBackend::~OptixBackend() = default;
+
+void OptixBackend::waitForCuda() {
+    auto contextStream = owlContextGetStream(impl_->context, 0);
+    auto launchStream = owlParamsGetCudaStream(impl_->params, 0);
+    cudaCheck(cudaEventRecord(impl_->cudaReady, nullptr));
+    cudaCheck(cudaStreamWaitEvent(contextStream, impl_->cudaReady));
+    cudaCheck(cudaStreamWaitEvent(launchStream, impl_->cudaReady));
+    cudaCheck(cudaEventRecord(impl_->accelReady, contextStream));
+    cudaCheck(cudaStreamWaitEvent(launchStream, impl_->accelReady));
+}
+
+void OptixBackend::setView(View view, const unsigned* contactFlags) {
+    launch_.view = view;
+    launch_.contactFlags = contactFlags;
+}
 
 void OptixBackend::update(bool rebuild) {
     if (rebuild) {

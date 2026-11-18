@@ -97,6 +97,14 @@ OPTIX_CLOSEST_HIT_PROGRAM(surface)() {
     if (dot(hit.normal, direction) > 0.f) hit.normal = -hit.normal;
     float shade = float((id * 2654435761u) >> 24) / 255.f;
     hit.albedo = Vec3(0.65f + 0.2f * shade, 0.38f + 0.2f * shade, 0.16f + 0.18f * shade);
+    if (optixLaunchParams.view == View::Speed) {
+        float speed = fminf(1.f, length(p.velocity) / 0.5f);
+        hit.albedo = (1.f - speed) * Vec3(0.1f, 0.3f, 0.9f) + speed * Vec3(1.f, 0.2f, 0.05f);
+    } else if (optixLaunchParams.view == View::Contacts) {
+        unsigned state = optixLaunchParams.contactFlags ? optixLaunchParams.contactFlags[id] : 0;
+        hit.albedo = state == 2 ? Vec3(1.f, 0.35f, 0.05f)
+                   : state == 1 ? Vec3(0.1f, 0.45f, 0.95f) : Vec3(0.65f);
+    }
     hit.found = true;
 }
 
@@ -120,9 +128,12 @@ OPTIX_RAYGEN_PROGRAM(image)() {
     auto size = optixGetLaunchDimensions();
     unsigned state = 1u + index.x + size.x * index.y;
     Vec3 color(0.f);
+    int grid = int(ceilf(sqrtf(float(data.samples))));
     for (int sample = 0; sample < data.samples; ++sample) {
-        float x = (2.f * (index.x + randomFloat(state)) / size.x - 1.f) * float(size.x) / size.y;
-        float y = 1.f - 2.f * (index.y + randomFloat(state)) / size.y;
+        float sx = data.view == View::Path ? randomFloat(state) : (sample % grid + 0.5f) / grid;
+        float sy = data.view == View::Path ? randomFloat(state) : (sample / grid + 0.5f) / grid;
+        float x = (2.f * (index.x + sx) / size.x - 1.f) * float(size.x) / size.y;
+        float y = 1.f - 2.f * (index.y + sy) / size.y;
         Vec3 origin = data.camera.origin;
         Vec3 direction = normalize(data.camera.forward + x * data.camera.right + y * data.camera.up);
         Vec3 throughput(1.f);
@@ -133,6 +144,11 @@ OPTIX_RAYGEN_PROGRAM(image)() {
             if (!hit.found) {
                 float t = 0.5f * (direction.y + 1.f);
                 color += throughput * ((1.f - t) * Vec3(0.9f) + t * Vec3(0.45f, 0.65f, 0.95f));
+                break;
+            }
+            if (data.view != View::Path) {
+                float light = 0.25f + 0.75f * fmaxf(0.f, dot(hit.normal, normalize(Vec3(1.f, 2.f, 1.f))));
+                color += light * hit.albedo;
                 break;
             }
             throughput *= hit.albedo;
