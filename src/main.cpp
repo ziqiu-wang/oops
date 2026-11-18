@@ -162,6 +162,10 @@ int main(int argc, char** argv) {
                 OrbitCamera orbit = simulation.defaultCamera();
                 PanelState panel;
                 panel.displayEvery = displayEvery;
+
+                long long frames = 0, totalSteps = 0;
+                auto loopStart = Clock::now();          // after init
+
                 while (!window.shouldClose() && std::chrono::duration<double>(Clock::now() - start).count() < 10.0) {
                     window.beginUi();
                     drawPanel(simulation, panel);
@@ -184,6 +188,8 @@ int main(int argc, char** argv) {
                     auto t2 = Clock::now();
                     window.present();
                     auto t3 = Clock::now();
+                    ++frames;
+                    totalSteps += stepsThisFrame;
                     if (panel.advancedStats) {
                         smooth(panel.physicsMs, ms(t0, t1));
                         smooth(panel.renderMs, ms(t1, t2));
@@ -200,11 +206,16 @@ int main(int argc, char** argv) {
                         }
                     }
                 }
+
+                double secs = std::chrono::duration<double>(Clock::now() - loopStart).count();
+                printf("frames=%lld  avg fps=%.1f  steps=%lld  steps/s=%.1f\n",
+                    frames, frames / secs, totalSteps, totalSteps / secs);
+
             } else {
                 for (int i = 0; i < steps; ++i) {
-                    simulation.step(rebuildEvery); //fixed schedule
+                    //simulation.step(rebuildEvery); //fixed schedule
                     // try adaptive schedule
-                    //simulation.step(-1);
+                    simulation.step(-1);
                     afterStep();
                 }
             }

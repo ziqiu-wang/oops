@@ -81,6 +81,7 @@ namespace oops
         // using CPU timer 
         // auto start = Clock::now();
         // using GPU timer
+        //rebuildEvery = -1;
         auto integrateGpu = Clock::now();
         integrate(particles_.data(), forces_.data(), oldAccelerations_.data(),
                   int(particles_.size()), settings);
@@ -98,11 +99,11 @@ namespace oops
         float accelTime = float(accelGpu.elapsedTime());
         timings.accel += accelGpu.elapsedTime();
 
+        computeForces();
+
         if (rebuildEvery < 0) {
             bvhOpt.update(rebuild, accelTime, lastQueryTime);
         }
-
-        computeForces();
     }
 
     void Simulation::upload(const std::vector<Particle> &particles)

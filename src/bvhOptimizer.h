@@ -20,7 +20,8 @@ namespace oops {
 		float smoothing = 0.3; // weight for ema
 
 		bool rebuild() const{
-			return lastRebuilt >= interval();
+			int intervalSize = interval();
+			return lastRebuilt >= intervalSize;
 		}
 
 		void update(bool rebuilt, float accelMs, float queryMs) {
@@ -37,7 +38,10 @@ namespace oops {
 			}
 			else {
 				if (refitBefore) {
-					tu = expMovingAvg(tu, queryMs);
+					tu = expMovingAvg(tu, accelMs);
+				}
+				else {
+					tu = accelMs;
 				}
 				refitBefore = true;
 				lastRebuilt++; // number of time steps 
