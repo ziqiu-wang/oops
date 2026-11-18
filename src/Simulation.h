@@ -2,6 +2,7 @@
 
 #include "OptixBackend.h"
 #include "OrbitCamera.h"
+#include "ContactHistory.h"
 #include <memory>
 
 namespace oops {
@@ -19,6 +20,13 @@ public:
     std::vector<uint32_t> render(int width = 800, int height = 600, int samples = 4);
     void renderTo(uint32_t* devicePixels, const Camera& camera, int width = 800, int height = 600, int samples = 4);
     OrbitCamera defaultCamera() const;
+    std::vector<Vec3> angularVelocities() const { return omega_.download(); }
+    std::vector<Vec3> torques() const { return torques_.download(); }
+    std::vector<StoredContact> contactStates() const { return history_.download(); }
+    std::vector<ContactState> wallStates() const { return wallHistory_.download(); }
+    Diagnostics diagnostics();
+    void saveGranularState(const std::string& path) const;
+    View view = View::Path;
 
     Settings settings;
     Response response;
@@ -30,6 +38,12 @@ public:
 private:
     DeviceBuffer<Particle> particles_;
     DeviceBuffer<Vec3> forces_, oldAccelerations_;
+    DeviceBuffer<Vec3> omega_, torques_;
+    DeviceBuffer<unsigned> contactFlags_;
+    DeviceBuffer<ContactState> wallHistory_;
+    ContactHistory history_;
+    bool forcesReady_ = false;
+    void granularForces(bool advance);
     std::unique_ptr<OptixBackend> backend_;
 };
 

@@ -64,6 +64,8 @@ namespace oops
         ImGui::BeginDisabled(!state.paused);
         if (ImGui::Button("Next frame"))
             state.stepOnce = true;
+        ImGui::SameLine();
+        if (ImGui::Button("1 step")) state.stepSubstep = true;
         ImGui::EndDisabled();
         ImGui::SameLine();
         if (ImGui::Button("Reset"))
@@ -71,6 +73,22 @@ namespace oops
 
         ImGui::SliderInt("Steps/frame", &state.displayEvery, 1, 500, "%d", ImGuiSliderFlags_AlwaysClamp);
         ImGui::Text("Sim time: %.3f s", simulation.steps * simulation.settings.dt);
+
+        ImGui::SeparatorText("Material (apply with Reset)");
+        int physics = int(state.pending.physics);
+        ImGui::Combo("Physics", &physics, "Mochi baseline\0Normal only\0Velocity friction\0History friction\0");
+        state.pending.physics = Physics(physics);
+        ImGui::SliderFloat("Friction", &state.pending.friction, 0.f, 1.5f);
+        ImGui::SliderFloat("k_t / k_n", &state.pending.tangentialStiffness, 0.05f, 1.f);
+        ImGui::SliderFloat("Tangential damping", &state.pending.tangentialDamping, 0.f, 3.f);
+        ImGui::SliderFloat("Restitution", &state.pending.restitution, 0.f, 1.f);
+        int walls = state.pending.walls == 63 ? 0 : state.pending.walls == 4 ? 1 : 2;
+        ImGui::Combo("Walls", &walls, "Box\0Floor only\0None\0");
+        state.pending.walls = walls == 0 ? 63 : walls == 1 ? 4 : 0;
+        ImGui::SeparatorText("Rendering");
+        ImGui::Combo("View", &state.view, "Path traced\0Stable preview\0Particle speed\0Contact state\0");
+        ImGui::SliderInt("Samples", &state.samples, 1, 64);
+        if (state.view == 3) ImGui::TextWrapped("Blue: loaded contact; orange: sliding contact; gray: no loaded contact. Any sliding contact wins per grain.");
 
         ImGui::SeparatorText("Record");
         if (ImGui::Button(state.recording ? "Stop" : "Record", ImVec2(60, 0)))
@@ -93,6 +111,10 @@ namespace oops
             // ImGui::Text("Steps this frame: %d", state.stepsThisFrame);
             // ImGui::Text("Steps/s: %.0f", state.stepsPerSecond);
             ImGui::Text("Real-time: %.2fx", state.realtimeFactor);
+            ImGui::Text("Contacts: %u (%u sliding)", state.diagnostics.contacts, state.diagnostics.sliding);
+            ImGui::Text("Max speed: %.5f", state.diagnostics.maximumSpeed);
+            ImGui::Text("Kinetic energy: %.6f", state.diagnostics.kineticEnergy);
+            ImGui::Text("Contact storage: %.2f MiB", state.diagnostics.historyBytes / (1024. * 1024.));
             ImGui::PlotLines("Frame ms", state.frameHistory, 120, state.historyIndex,
                              nullptr, 0.f, 50.f, ImVec2(0, 60));
             ImGui::Checkbox("Profile phases (slower)", &state.profilePhases);

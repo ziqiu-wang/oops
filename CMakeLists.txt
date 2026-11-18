@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5) # GLEW's older CMake project, including CMake 4.
 set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures")
 project(OOPS LANGUAGES C CXX CUDA)
 
@@ -52,7 +53,7 @@ embed_ptx(OUTPUT_TARGET mochi_ptx
     PTX_LINK_LIBRARIES owl::owl
     SOURCES src/OptixPrograms.cu)
 
-add_library(oops_gpu src/OptixBackend.cpp src/Granular.cu src/Simulation.cpp src/Render.cpp)
+add_library(oops_gpu src/OptixBackend.cpp src/Granular.cu src/ContactHistory.cu src/Simulation.cpp src/Render.cpp)
 target_link_libraries(oops_gpu PUBLIC oops_common owl::owl CUDA::cudart PRIVATE mochi_ptx stb_image)
 
 add_library(oops_window src/Window.cpp)
@@ -75,6 +76,10 @@ if(BUILD_TESTING)
     target_link_libraries(mochi_tests PRIVATE oops_gpu)
     add_test(NAME mochi_cpu COMMAND mochi_tests --cpu-only)
     add_test(NAME mochi_gpu COMMAND mochi_tests)
+    add_executable(granular_tests tests/granular.cpp)
+    target_link_libraries(granular_tests PRIVATE oops_gpu)
+    add_test(NAME granular_cpu COMMAND granular_tests --cpu-only)
+    add_test(NAME granular_gpu COMMAND granular_tests)
 endif()
 
 option(MOCHI_BUILD_UPSTREAM "Build a harness around the authors' original kernels" OFF)

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cuda_runtime.h>
 #include <cstdio>
+#include <iomanip>
 #include "Window.h"
 #include "Panel.h" // for custom imgui
 
@@ -20,10 +21,17 @@ namespace
         std::cout << "Mochi sphere simulation (CUDA + OptiX)\n"
                      "  --live [--display-every N]  Show the simulation in a window (default N = 50)\n"
                      "  --input FILE                x y z radius mass [vx vy vz]\n"
-                     "  --particles N --scene mixed|uniform|clustered --seed N\n"
+                     "  --particles N --scene mixed|uniform|clustered|column --seed N\n"
                      "  --save-input FILE           Export the generated/input scene\n"
                      "  --steps N --warmup N        Defaults: 1000 steps, no warmup\n"
                      "  --response contacts|fused   Default: contacts\n"
+                     "  --physics mochi|normal|nohistory|history  Default: mochi\n"
+                     "  --friction F --kt-ratio F --tangent-damping F\n"
+                     "  --walls box|floor|none      Default: box\n"
+                     "  --view path|preview|speed|contacts --samples N\n"
+                     "  --profile                  Synchronize phase timings (slower)\n"
+                     "  --metrics FILE.csv         Final physical and runtime measurements\n"
+                     "  --live-frames N             Close live viewer after N frames (0 = unlimited)\n"
                      "  --rebuild-every N           0 = refit only, 1 = always rebuild\n"
                      "  --dt F --stiffness F --restitution F --box-width F\n"
                      "  --gravity X Y Z            Default: 0 -9.81 0\n"
@@ -61,6 +69,10 @@ int main(int argc, char **argv)
         std::string input, saveInput, snapshot, image, timingFile;
         std::string scene = "mixed", renderDir = "build/frames";
         std::string stateDir = "build/states";
+        std::string metrics;
+        View view = View::Path;
+        int samples = 4, liveFrames = 0;
+        bool profile = false;
         // for live output
         bool live = false;
         int displayEvery = 50;
@@ -118,6 +130,36 @@ int main(int argc, char **argv)
                     throw std::runtime_error("Unknown response: " + mode);
                 response = mode == "contacts" ? Response::Contacts : Response::Fused;
             }
+            else if (option == "--physics") {
+                auto mode = value();
+                if (mode == "mochi") settings.physics = Physics::Mochi;
+                else if (mode == "normal") settings.physics = Physics::Normal;
+                else if (mode == "nohistory") settings.physics = Physics::NoHistory;
+                else if (mode == "history") settings.physics = Physics::History;
+                else throw std::runtime_error("Unknown physics: " + mode);
+            }
+            else if (option == "--friction") settings.friction = std::stof(value());
+            else if (option == "--kt-ratio") settings.tangentialStiffness = std::stof(value());
+            else if (option == "--tangent-damping") settings.tangentialDamping = std::stof(value());
+            else if (option == "--walls") {
+                auto walls = value();
+                if (walls == "box") settings.walls = 63;
+                else if (walls == "floor") settings.walls = 4;
+                else if (walls == "none") settings.walls = 0;
+                else throw std::runtime_error("Walls must be box, floor, or none.");
+            }
+            else if (option == "--view") {
+                auto mode = value();
+                if (mode == "path") view = View::Path;
+                else if (mode == "preview") view = View::Preview;
+                else if (mode == "speed") view = View::Speed;
+                else if (mode == "contacts") view = View::Contacts;
+                else throw std::runtime_error("Unknown view: " + mode);
+            }
+            else if (option == "--samples") samples = std::stoi(value());
+            else if (option == "--profile") profile = true;
+            else if (option == "--metrics") metrics = value();
+            else if (option == "--live-frames") liveFrames = std::stoi(value());
             else if (option == "--save-input")
                 saveInput = value();
             else if (option == "--snapshot")
@@ -150,8 +192,13 @@ int main(int argc, char **argv)
         }
         if (count < 1 || steps < 0 || warmup < 0 || rebuildEvery < 0 || renderEvery < 0 || stateEvery < 0 || displayEvery < 1 || !(settings.dt > 0.f) || !(settings.stiffness > 0.f) || !(settings.restitution >= 0.f && settings.restitution <= 1.f))
             throw std::runtime_error("Invalid particle count, timestep, or simulation parameter.");
-        if (scene != "mixed" && scene != "uniform" && scene != "clustered")
-            throw std::runtime_error("Scene must be mixed, uniform, or clustered.");
+        if (!(settings.friction >= 0.f) || !(settings.tangentialStiffness > 0.f)
+            || !(settings.tangentialDamping >= 0.f) || samples < 1 || liveFrames < 0)
+            throw std::runtime_error("Invalid friction, tangential parameter, or sample count.");
+        if (settings.physics != Physics::Mochi && response != Response::Contacts)
+            throw std::runtime_error("Granular physics requires --response contacts.");
+        if (scene != "mixed" && scene != "uniform" && scene != "clustered" && scene != "column")
+            throw std::runtime_error("Scene must be mixed, uniform, clustered, or column.");
 
         auto initial = input.empty() ? makeScene(count, scene, seed) : loadScene(input);
         if (!saveInput.empty())
@@ -162,6 +209,10 @@ int main(int argc, char **argv)
         if (morton)
             mortonSort(initial);
         Simulation simulation(initial, settings, response);
+        simulation.view = view;
+        simulation.profile = profile;
+        double measuredWall = 0.;
+        int measuredSteps = 0;
 
         if (validate)
         {
@@ -191,6 +242,7 @@ int main(int argc, char **argv)
         {
             for (int i = 0; i < warmup; ++i)
                 simulation.step(rebuildEvery);
+            cudaCheck(cudaDeviceSynchronize());
             simulation.timings = {};
             auto start = std::chrono::steady_clock::now();
             int stepCount = 0;
@@ -208,7 +260,7 @@ int main(int argc, char **argv)
                 {
                     std::filesystem::create_directories(renderDir);
                     writeImage(renderDir + "/frame_" + std::to_string(stepCount) + ".png",
-                               800, 600, simulation.render());
+                               800, 600, simulation.render(800, 600, samples));
                 }
             };
 
@@ -218,6 +270,11 @@ int main(int argc, char **argv)
                 OrbitCamera orbit = simulation.defaultCamera();
                 PanelState panel;
                 panel.displayEvery = displayEvery;
+                panel.pending = settings;
+                panel.view = int(view);
+                panel.samples = samples;
+                panel.profilePhases = profile;
+                int displayed = 0;
                 // ----- recording vars
                 std::string recordDir;
                 bool wasRecording = false;
@@ -229,8 +286,11 @@ int main(int argc, char **argv)
                     drawPanel(simulation, panel);
                     window.setLeftInset(panelInset(panel));
                     simulation.profile = panel.profilePhases;
+                    simulation.view = View(panel.view);
                     if (panel.resetRequested)
                     {
+                        simulation.settings = panel.pending;
+                        simulation.response = panel.pending.physics == Physics::Mochi ? response : Response::Contacts;
                         simulation.upload(initial);
                         stepCount = 0;
                         panel.resetRequested = false;
@@ -249,8 +309,10 @@ int main(int argc, char **argv)
                     Timings before = simulation.timings;
                     auto t0 = Clock::now(); // start of physics time
                     // int stepsThisFrame = panel.paused ? (panel.stepOnce ? 1 : 0) : panel.displayEvery;
-                    int stepsThisFrame = panel.paused ? (panel.stepOnce ? panel.displayEvery : 0) : panel.displayEvery; // one frame instead of 1 physics step
+                    int stepsThisFrame = panel.paused
+                        ? (panel.stepSubstep ? 1 : panel.stepOnce ? panel.displayEvery : 0) : panel.displayEvery;
                     panel.stepOnce = false;
+                    panel.stepSubstep = false;
 
                     for (int i = 0; i < stepsThisFrame; ++i)
                     {
@@ -266,7 +328,7 @@ int main(int argc, char **argv)
                     orbit.update(window.input());
                     if (uint32_t *pixels = window.map())
                     {
-                        simulation.renderTo(pixels, orbit.camera(), window.width(), window.height());
+                        simulation.renderTo(pixels, orbit.camera(), window.width(), window.height(), panel.samples);
                         if (panel.recording) {
                             frame.resize(size_t(window.width()) * window.height());
                             cudaMemcpy(frame.data(), pixels, frame.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost);
@@ -278,6 +340,7 @@ int main(int argc, char **argv)
                     }
                     auto t2 = Clock::now();
                     window.present();
+                    if (panel.advancedStats && displayed % 15 == 0) panel.diagnostics = simulation.diagnostics();
                     auto t3 = Clock::now();
                     float frameSeconds = ms(t0, t3) / 1000.f;
                     if (frameSeconds > 0.f)
@@ -302,6 +365,8 @@ int main(int argc, char **argv)
                             smooth(panel.integrateMs, float(now.integrate - before.integrate) / n);
                         }
                     }
+                    ++displayed;
+                    if (liveFrames && displayed >= liveFrames) break;
                 }
             }
             else
@@ -313,15 +378,20 @@ int main(int argc, char **argv)
                 }
             }
 
+            cudaCheck(cudaDeviceSynchronize());
             double total = std::chrono::duration<double, std::milli>(
                                std::chrono::steady_clock::now() - start)
                                .count();
+            measuredWall = total;
+            measuredSteps = stepCount;
             if (steps == 0 && warmup == 0)
                 simulation.computeForces();
             const auto &t = simulation.timings;
             std::cout << initial.size() << " particles, " << stepCount << " measured steps\n"
                       << "accel=" << t.accel << " query=" << t.query << " response=" << t.response
                       << " integrate=" << t.integrate << " wall=" << total << " ms\n";
+            if (!simulation.profile)
+                std::cout << "Phase timers are asynchronous; use --profile for phase measurements.\n";
             if (!timingFile.empty())
             {
                 parentDirectory(timingFile);
@@ -337,11 +407,35 @@ int main(int argc, char **argv)
         {
             parentDirectory(snapshot);
             saveSnapshot(snapshot, simulation.particles(), simulation.forces(), simulation.contacts());
+            simulation.saveGranularState(snapshot);
         }
         if (!image.empty())
         {
             parentDirectory(image);
-            writeImage(image, 800, 600, simulation.render());
+            writeImage(image, 800, 600, simulation.render(800, 600, samples));
+        }
+        if (!metrics.empty()) {
+            parentDirectory(metrics);
+            auto diagnostics = simulation.diagnostics();
+            auto state = simulation.particles();
+            float minX = state[0].position.x - state[0].radius, maxX = minX, height = 0.f;
+            double centerY = 0., mass = 0.;
+            for (auto p : state) {
+                minX = std::min(minX, p.position.x - p.radius);
+                maxX = std::max(maxX, p.position.x + p.radius);
+                height = std::max(height, p.position.y + p.radius);
+                centerY += p.mass * p.position.y;
+                mass += p.mass;
+            }
+            std::ofstream csv(metrics);
+            if (!csv) throw std::runtime_error("Could not write metrics: " + metrics);
+            csv << "physics,particles,steps,dt,simulated_s,wall_ms,realtime_factor,contacts,sliding,max_speed,kinetic_energy,history_bytes,width_x,height,center_y,profiled\n";
+            csv << std::setprecision(10) << int(simulation.settings.physics) << ',' << state.size()
+                << ',' << measuredSteps << ',' << simulation.settings.dt << ',' << measuredSteps * double(simulation.settings.dt)
+                << ',' << measuredWall << ',' << (measuredWall > 0 ? measuredSteps * double(simulation.settings.dt) * 1000. / measuredWall : 0.)
+                << ',' << diagnostics.contacts << ',' << diagnostics.sliding << ',' << diagnostics.maximumSpeed
+                << ',' << diagnostics.kineticEnergy << ',' << diagnostics.historyBytes << ',' << maxX - minX
+                << ',' << height << ',' << centerY / mass << ',' << simulation.profile << '\n';
         }
         return 0;
     }

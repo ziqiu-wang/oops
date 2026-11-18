@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace oops {
 
@@ -18,6 +19,11 @@ public:
     ~DeviceBuffer() { cudaFree(pointer_); }
     DeviceBuffer(const DeviceBuffer&) = delete;
     DeviceBuffer& operator=(const DeviceBuffer&) = delete;
+
+    void swap(DeviceBuffer& other) {
+        std::swap(pointer_, other.pointer_);
+        std::swap(size_, other.size_);
+    }
 
     void resize(size_t count) {
         cudaCheck(cudaFree(pointer_));

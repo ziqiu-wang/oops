@@ -2,6 +2,7 @@
 
 #include "Types.h"
 #include <vector>
+#include <map>
 
 namespace oops {
 
@@ -15,6 +16,22 @@ struct ReferenceSimulation {
     ReferenceSimulation(std::vector<Particle> input, Settings configuration = {});
     void computeForces();
     void step();
+};
+
+// All-pairs CPU driver for short granular trajectories; no GPU storage or sorting.
+struct ReferenceGranularSimulation {
+    std::vector<Particle> particles;
+    std::vector<Vec3> forces, omega, torques;
+    std::vector<ContactState> walls;
+    std::map<uint64_t, ContactState> history;
+    Settings settings;
+    ReferenceGranularSimulation(std::vector<Particle> input, Settings configuration);
+    void computeForces();
+    void step();
+private:
+    bool ready_ = false;
+    void evaluate(bool advance);
+    void kick(bool drift);
 };
 
 } // namespace oops

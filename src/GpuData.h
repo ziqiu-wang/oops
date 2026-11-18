@@ -24,6 +24,8 @@ struct LaunchData {
     uint32_t* pixels = nullptr;
     Camera camera;
     int samples = 4;
+    View view = View::Path;
+    const unsigned* contactFlags = nullptr;
 };
 
 } // namespace oops

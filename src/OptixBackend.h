@@ -15,6 +15,8 @@ public:
     OptixBackend& operator=(const OptixBackend&) = delete;
 
     void update(bool rebuild);
+    void waitForCuda(); // Order default-stream physics before OWL's two streams.
+    void setView(View view, const unsigned* contactFlags = nullptr);
     unsigned findContacts(const Settings& settings);
     void accumulateForces(Vec3* forces, const Settings& settings);
     std::vector<Contact> contacts() const;

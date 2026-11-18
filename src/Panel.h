@@ -27,6 +27,10 @@ namespace oops
         // playback tools
         bool paused = false;
         bool stepOnce = false;
+        bool stepSubstep = false;
+        Settings pending;
+        int view = 0, samples = 4;
+        Diagnostics diagnostics;
         bool resetRequested = false;
         bool recording = false;
         int recordedFrames = 0;
