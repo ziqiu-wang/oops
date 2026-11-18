@@ -37,8 +37,27 @@ namespace oops
     {
         resetForces(particles_.data(), forces_.data(), int(particles_.size()), settings.gravity);
         syncIf(profile);
-        auto start = Clock::now();
-        if (response == Response::Fused)
+        //auto start = Clock::now();
+        unsigned count = 0;
+        queryGpu.begin(backend_->launchStream());
+        if (response == Response::Fused) {
+            backend_->accumulateForces(forces_.data(), settings);
+        }
+        else {
+            count = backend_->findContacts(settings);
+        }
+        queryGpu.end(backend_->launchStream());
+        lastQueryTime = float(queryGpu.elapsedTime());
+        timings.query += queryGpu.elapsedTime();
+
+        if (response == Response::Contacts) {
+            auto start = Clock::now();
+            applyContacts(particles_.data(), forces_.data(), backend_->deviceContacts(), count, settings);
+            syncIf(profile);
+            timings.response += elapsed(start);
+        }
+
+        /*if (response == Response::Fused)
         {
             backend_->accumulateForces(forces_.data(), settings);
             syncIf(profile);
@@ -53,21 +72,36 @@ namespace oops
             applyContacts(particles_.data(), forces_.data(), backend_->deviceContacts(), count, settings);
             syncIf(profile);
             timings.response += elapsed(start);
-        }
+        }*/
     }
 
+    // rebuild/refit policy 
     void Simulation::step(int rebuildEvery)
     {
-        auto start = Clock::now();
+        // using CPU timer 
+        // auto start = Clock::now();
+        // using GPU timer
+        auto integrateGpu = Clock::now();
         integrate(particles_.data(), forces_.data(), oldAccelerations_.data(),
                   int(particles_.size()), settings);
         syncIf(profile);
-        timings.integrate += elapsed(start);
+        timings.integrate += elapsed(integrateGpu);
+        
         ++steps;
-        start = Clock::now();
-        backend_->update(rebuildEvery > 0 && steps % rebuildEvery == 0);
-        syncIf(profile);
-        timings.accel += elapsed(start);
+        bool rebuild = rebuildEvery < 0 ? bvhOpt.rebuild() : (rebuildEvery > 0 && steps % rebuildEvery == 0);
+
+        accelGpu.begin(backend_->defaultStream());
+        backend_->update(rebuild);
+        accelGpu.end(backend_->defaultStream());
+        //syncIf(profile);
+        //timings.accel += elapsed(start);
+        float accelTime = float(accelGpu.elapsedTime());
+        timings.accel += accelGpu.elapsedTime();
+
+        if (rebuildEvery < 0) {
+            bvhOpt.update(rebuild, accelTime, lastQueryTime);
+        }
+
         computeForces();
     }
 

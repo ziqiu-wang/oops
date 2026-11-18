@@ -2,6 +2,8 @@
 
 #include "OptixBackend.h"
 #include "OrbitCamera.h"
+#include "GpuTimer.h"
+#include "bvhOptimizer.h"
 #include <memory>
 
 namespace oops {
@@ -31,6 +33,9 @@ private:
     DeviceBuffer<Particle> particles_;
     DeviceBuffer<Vec3> forces_, oldAccelerations_;
     std::unique_ptr<OptixBackend> backend_;
+    GpuTimer accelGpu, queryGpu;
+    bvhOptimizer bvhOpt;
+    float lastQueryTime;
 };
 
 void writeImage(const std::string& path, int width, int height,

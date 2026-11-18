@@ -13,6 +13,7 @@
 using namespace oops;
 
 namespace {
+
 void help() {
     std::cout <<
         "Mochi sphere simulation (CUDA + OptiX)\n"
@@ -155,11 +156,13 @@ int main(int argc, char** argv) {
             };
 
             if (live) {
+                using Clock = std::chrono::steady_clock;
+                auto start = Clock::now();
                 Window window(800, 600, "mochi");
                 OrbitCamera orbit = simulation.defaultCamera();
                 PanelState panel;
                 panel.displayEvery = displayEvery;
-                while (!window.shouldClose()) {
+                while (!window.shouldClose() && std::chrono::duration<double>(Clock::now() - start).count() < 10.0) {
                     window.beginUi();
                     drawPanel(simulation, panel);
                     window.setLeftInset(panelInset(panel));
@@ -199,7 +202,9 @@ int main(int argc, char** argv) {
                 }
             } else {
                 for (int i = 0; i < steps; ++i) {
-                    simulation.step(rebuildEvery);
+                    simulation.step(rebuildEvery); //fixed schedule
+                    // try adaptive schedule
+                    //simulation.step(-1);
                     afterStep();
                 }
             }

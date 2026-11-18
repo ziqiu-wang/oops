@@ -122,4 +122,8 @@ std::vector<uint32_t> OptixBackend::render(const Camera& camera, int width,
     return pixels_.download();
 }
 
+cudaStream_t OptixBackend::launchStream() const {
+    return static_cast<cudaStream_t>(owlParamsGetCudaStream(impl_->params, 0));
+}
+
 } // namespace oops
