@@ -169,6 +169,19 @@ namespace oops
         }
     }
 
+    void Simulation::resize(const std::vector<Particle> &particles)
+    {
+        if (particles.empty()) {
+            throw std::runtime_error("Simulation needs at least one particle.");
+        }
+        cudaDeviceSynchronize(); // the GPU must finish with the old buffers before they are freed
+        particles_.upload(particles);
+        forces_.resize(particles.size());
+        oldAccelerations_.resize(particles.size());
+        backend_->resize(particles_.data(), int(particles.size()));
+        upload(particles); // resizes friction state and resets the dynamics
+    }
+
     std::vector<Contact> Simulation::contacts()
     {
         if (settings.physics != Physics::Mochi) backend_->waitForCuda();

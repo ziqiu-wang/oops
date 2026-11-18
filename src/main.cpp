@@ -312,6 +312,34 @@ int main(int argc, char **argv)
                         panel.diagnostics = {};
                         panel.resetRequested = false;
                     }
+                    if (panel.applySceneRequested)
+                    {
+                        panel.applySceneRequested = false;
+                        auto generated = makeScene(panel.scene);
+                        if (generated.empty())
+                        {
+                            panel.sceneStatus = "No grains fit: check that the blocks are inside the box.";
+                        }
+                        else
+                        {
+                            initial = std::move(generated);
+                            simulation.settings.boxWidth = panel.scene.boxWidth;
+                            simulation.settings.stiffness = panel.scene.stiffness;
+                            simulation.settings.dt = std::min(0.0004f, stableDt(initial, panel.scene.stiffness));
+                            // Reset copies panel.pending into the simulation, so keep the scene's values there.
+                            panel.pending.boxWidth = simulation.settings.boxWidth;
+                            panel.pending.stiffness = simulation.settings.stiffness;
+                            panel.pending.dt = simulation.settings.dt;
+                            simulation.resize(initial);
+                            stepCount = 0;
+                            panel.diagnostics = {};
+                            orbit = simulation.defaultCamera();
+                            char status[96];
+                            std::snprintf(status, sizeof(status), "%d grains, dt = %.1e s",
+                                          int(initial.size()), simulation.settings.dt);
+                            panel.sceneStatus = status;
+                        }
+                    }
                     if (panel.recording && !wasRecording)
                     {
                         int take = 1;

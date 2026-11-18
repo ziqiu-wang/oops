@@ -11,6 +11,7 @@ namespace oops {
 struct OptixBackend::Impl {
     OWLContext context;
     OWLGroup geometryGroup, world;
+    OWLGeom geometry;
     OWLRayGen query, image;
     OWLParams params;
     cudaEvent_t cudaReady, accelReady;
@@ -40,7 +41,7 @@ struct OptixBackend::Impl {
         params = owlParamsCreate(context, sizeof(LaunchData), paramsVars, -1);
         owlBuildPrograms(context);
 
-        OWLGeom geometry = owlGeomCreate(context, type);
+        geometry = owlGeomCreate(context, type);
         owlGeomSetPrimCount(geometry, count);
         owlGeomSetPointer(geometry, "particles", particles);
         unsigned flags = OPTIX_BUILD_FLAG_ALLOW_UPDATE | OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
@@ -72,6 +73,18 @@ OptixBackend::OptixBackend(Particle* particles, int count, unsigned capacity)
 }
 
 OptixBackend::~OptixBackend() = default;
+
+// for custom scene
+void OptixBackend::resize(Particle* particles, int count) {
+    owlGeomSetPrimCount(impl_->geometry, count);
+    owlGeomSetPointer(impl_->geometry, "particles", particles);
+    owlGroupBuildAccel(impl_->geometryGroup);
+    owlGroupBuildAccel(impl_->world);
+    owlBuildSBT(impl_->context);
+    particleCount_ = count;
+    launch_.particles = particles;
+    launch_.world = owlGroupGetTraversable(impl_->world, 0);
+}
 
 void OptixBackend::waitForCuda() {
     auto contextStream = owlContextGetStream(impl_->context, 0);

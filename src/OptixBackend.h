@@ -24,6 +24,8 @@ public:
     const Contact* deviceContacts() const { return contacts_.data(); }
     std::vector<uint32_t> render(const Camera& camera, int width, int height, int samples);
     void renderTo(const Camera& camera, uint32_t* devicePixels, int width, int height, int samples);
+    
+    void resize(Particle* particles, int count);
 
     // stream for gpu timer measuring bvh rebuild and refit 
     cudaStream_t defaultStream() const { return nullptr; }

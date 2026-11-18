@@ -16,6 +16,7 @@ public:
     void computeForces();
     void step(int rebuildEvery = 0); // 0 = refit only, N = rebuild every N steps, -1 = adaptive
     void upload(const std::vector<Particle>& particles); // Same count; resets dynamics.
+    void resize(const std::vector<Particle>& particles); // any count, resets dynamics
     std::vector<Particle> particles() const { return particles_.download(); }
     std::vector<Vec3> forces() const { return forces_.download(); }
     std::vector<Contact> contacts();
