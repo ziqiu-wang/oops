@@ -136,7 +136,10 @@ int main(int argc, char** argv) {
                       << (correct ? "PASS\n" : "FAIL\n");
             if (!correct) return 1;
         } else {
-            for (int i = 0; i < warmup; ++i) simulation.step(rebuildEvery);
+            for (int i = 0; i < warmup; ++i) {
+                //simulation.step(rebuildEvery); fixed schedule
+                simulation.step(-1);
+            }
             simulation.timings = {};
             auto start = std::chrono::steady_clock::now();
             int stepCount = 0;
@@ -175,7 +178,8 @@ int main(int argc, char** argv) {
                     auto t0 = Clock::now();
                     int stepsThisFrame = panel.displayEvery;
                     for (int i = 0; i < stepsThisFrame; ++i) {
-                        simulation.step(rebuildEvery);
+                        //simulation.step(rebuildEvery);
+                        simulation.step(-1);
                         afterStep();
                     }
                     if (panel.advancedStats) cudaDeviceSynchronize();
@@ -213,7 +217,7 @@ int main(int argc, char** argv) {
 
             } else {
                 for (int i = 0; i < steps; ++i) {
-                    //simulation.step(rebuildEvery); //fixed schedule
+                    //simulation.step(rebuildEvery); fixed schedule
                     // try adaptive schedule
                     simulation.step(-1);
                     afterStep();
