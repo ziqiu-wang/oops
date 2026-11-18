@@ -156,11 +156,15 @@ namespace oops
 
         ImGui::SliderInt("Steps/frame", &state.displayEvery, 1, 500, "%d", ImGuiSliderFlags_AlwaysClamp);
         ImGui::Text("Sim time: %.3f s", simulation.steps * simulation.settings.dt);
+        ImGui::Checkbox("Adaptive BVH", &state.adaptiveBvh);
 
         ImGui::SeparatorText("Material (apply with Reset)");
         int physics = int(state.pending.physics);
         ImGui::Combo("Physics", &physics, "Mochi baseline\0Normal only\0Velocity friction\0History friction\0");
         state.pending.physics = Physics(physics);
+        if (state.pending.physics != simulation.settings.physics ||
+            state.pending.rollingResistance != simulation.settings.rollingResistance)
+            ImGui::TextColored(ImVec4(1.f, 0.8f, 0.3f, 1.f), "Not applied yet: press Reset or Apply scene");
         ImGui::SliderFloat("Friction", &state.pending.friction, 0.f, 1.5f);
         ImGui::SliderFloat("k_t / k_n", &state.pending.tangentialStiffness, 0.05f, 1.f);
         ImGui::SliderFloat("Tangential damping", &state.pending.tangentialDamping, 0.f, 3.f);

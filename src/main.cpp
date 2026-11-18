@@ -286,6 +286,8 @@ int main(int argc, char **argv)
                 OrbitCamera orbit = simulation.defaultCamera();
                 PanelState panel;
                 panel.displayEvery = displayEvery;
+                panel.adaptiveBvh = rebuildEvery < 0;
+                const int fixedRebuildEvery = std::max(rebuildEvery, 0); // used while Adaptive BVH is unchecked
                 panel.pending = settings;
                 panel.view = int(view);
                 panel.samples = samples;
@@ -323,6 +325,9 @@ int main(int argc, char **argv)
                         else
                         {
                             initial = std::move(generated);
+                            // Apply scene also applies the physics chosen in the panel, like Reset.
+                            simulation.settings = panel.pending;
+                            simulation.response = panel.pending.physics == Physics::Mochi ? response : Response::Contacts;
                             simulation.settings.boxWidth = panel.scene.boxWidth;
                             simulation.settings.stiffness = panel.scene.stiffness;
                             simulation.settings.dt = std::min(0.0004f, stableDt(initial, panel.scene.stiffness));
@@ -361,7 +366,7 @@ int main(int argc, char **argv)
 
                     for (int i = 0; i < stepsThisFrame; ++i)
                     {
-                        simulation.step(rebuildEvery);
+                        simulation.step(panel.adaptiveBvh ? -1 : fixedRebuildEvery);
                         afterStep();
                     }
                     if (panel.advancedStats)

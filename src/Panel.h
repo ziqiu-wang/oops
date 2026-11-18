@@ -35,6 +35,7 @@ namespace oops
         bool resetRequested = false;
         bool recording = false;
         int recordedFrames = 0;
+        bool adaptiveBvh = false;
 
         // scene builder
         SceneDesc scene;
