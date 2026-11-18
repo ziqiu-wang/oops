@@ -85,6 +85,26 @@ namespace oops
         int walls = state.pending.walls == 63 ? 0 : state.pending.walls == 4 ? 1 : 2;
         ImGui::Combo("Walls", &walls, "Box\0Floor only\0None\0");
         state.pending.walls = walls == 0 ? 63 : walls == 1 ? 4 : 0;
+        ImGui::SeparatorText("Rolling resistance (apply with Reset)");
+        bool legacy = state.pending.physics == Physics::Mochi;
+        if (legacy) state.pending.rollingResistance = false;
+        ImGui::BeginDisabled(legacy);
+        ImGui::Checkbox("Enable rolling resistance", &state.pending.rollingResistance);
+        ImGui::BeginDisabled(!state.pending.rollingResistance);
+        ImGui::PushItemWidth(145.f);
+        ImGui::SliderFloat("Rolling coefficient", &state.pending.rollingFriction, 0.f, 1.f,
+                           "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Torque limit: coefficient x normal load x effective radius.");
+        ImGui::SliderFloat("k_r / k_n", &state.pending.rollingStiffness, 0.001f, 1.f,
+                           "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rolling spring stiffness relative to normal stiffness.");
+        ImGui::SliderFloat("Rolling damping", &state.pending.rollingDamping, 0.f, 2.f,
+                           "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Damping ratio for rolling motion, independent of restitution.");
+        ImGui::PopItemWidth();
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
+        if (legacy) ImGui::TextDisabled("Select a new granular model to enable.");
         ImGui::SeparatorText("Rendering");
         ImGui::Combo("View", &state.view, "Path traced\0Stable preview\0Particle speed\0Contact state\0");
         ImGui::SliderInt("Samples", &state.samples, 1, 64);
@@ -113,6 +133,8 @@ namespace oops
             ImGui::Text("Real-time: %.2fx", state.realtimeFactor);
             ImGui::Text("Contacts: %u (%u sliding)", state.diagnostics.contacts, state.diagnostics.sliding);
             ImGui::Text("Max speed: %.5f", state.diagnostics.maximumSpeed);
+            ImGui::Text("Max spin: %.5f rad/s", state.diagnostics.maximumAngularSpeed);
+            ImGui::Text("Rolling limit: %u contacts", state.diagnostics.rollingYielding);
             ImGui::Text("Kinetic energy: %.6f", state.diagnostics.kineticEnergy);
             ImGui::Text("Contact storage: %.2f MiB", state.diagnostics.historyBytes / (1024. * 1024.));
             ImGui::PlotLines("Frame ms", state.frameHistory, 120, state.historyIndex,

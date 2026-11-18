@@ -28,6 +28,9 @@ struct ContactState {
     Vec3 tangentialForce{0.f};
     float normalForce = 0.f;
     unsigned sliding = 0;
+    Vec3 rollingDisplacement{0.f};
+    Vec3 rollingTorque{0.f}; // Added couple on A; the couple on B is its negative.
+    unsigned rollingYielding = 0;
 };
 
 struct StoredContact {
@@ -37,7 +40,9 @@ struct StoredContact {
 
 struct Diagnostics {
     unsigned contacts = 0, sliding = 0;
+    unsigned rollingYielding = 0;
     float maximumSpeed = 0.f;
+    float maximumAngularSpeed = 0.f;
     double kineticEnergy = 0.;
     size_t historyBytes = 0;
 };
@@ -55,6 +60,10 @@ struct Settings {
     float tangentialStiffness = 0.4f; // k_t / k_n
     float tangentialDamping = 1.f;   // eta_t / eta_n
     unsigned walls = 63; // bits: -X,+X,-Y,+Y,-Z,+Z; floor only = 4
+    bool rollingResistance = false;
+    float rollingFriction = 0.05f;
+    float rollingStiffness = 0.1f; // k_r / k_n, for the SDS pseudo-force spring
+    float rollingDamping = 0.2f;   // Damping ratio of the relative angular mode
 };
 
 enum class Response { Fused, Contacts };

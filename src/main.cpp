@@ -27,6 +27,8 @@ namespace
                      "  --response contacts|fused   Default: contacts\n"
                      "  --physics mochi|normal|nohistory|history  Default: mochi\n"
                      "  --friction F --kt-ratio F --tangent-damping F\n"
+                     "  --rolling                  Enable SDS history-based rolling resistance\n"
+                     "  --rolling-friction F --kr-ratio F --rolling-damping F\n"
                      "  --walls box|floor|none      Default: box\n"
                      "  --view path|preview|speed|contacts --samples N\n"
                      "  --profile                  Synchronize phase timings (slower)\n"
@@ -141,6 +143,10 @@ int main(int argc, char **argv)
             else if (option == "--friction") settings.friction = std::stof(value());
             else if (option == "--kt-ratio") settings.tangentialStiffness = std::stof(value());
             else if (option == "--tangent-damping") settings.tangentialDamping = std::stof(value());
+            else if (option == "--rolling") settings.rollingResistance = true;
+            else if (option == "--rolling-friction") settings.rollingFriction = std::stof(value());
+            else if (option == "--kr-ratio") settings.rollingStiffness = std::stof(value());
+            else if (option == "--rolling-damping") settings.rollingDamping = std::stof(value());
             else if (option == "--walls") {
                 auto walls = value();
                 if (walls == "box") settings.walls = 63;
@@ -197,6 +203,11 @@ int main(int argc, char **argv)
             throw std::runtime_error("Invalid friction, tangential parameter, or sample count.");
         if (settings.physics != Physics::Mochi && response != Response::Contacts)
             throw std::runtime_error("Granular physics requires --response contacts.");
+        if (!(settings.rollingFriction >= 0.f) || !(settings.rollingStiffness > 0.f)
+            || !(settings.rollingDamping >= 0.f))
+            throw std::runtime_error("Rolling coefficient/damping must be nonnegative and k_r/k_n positive.");
+        if (settings.rollingResistance && settings.physics == Physics::Mochi)
+            throw std::runtime_error("Rolling resistance requires --physics normal, nohistory, or history.");
         if (scene != "mixed" && scene != "uniform" && scene != "clustered" && scene != "column")
             throw std::runtime_error("Scene must be mixed, uniform, clustered, or column.");
 
@@ -293,6 +304,7 @@ int main(int argc, char **argv)
                         simulation.response = panel.pending.physics == Physics::Mochi ? response : Response::Contacts;
                         simulation.upload(initial);
                         stepCount = 0;
+                        panel.diagnostics = {};
                         panel.resetRequested = false;
                     }
                     if (panel.recording && !wasRecording)
@@ -429,13 +441,16 @@ int main(int argc, char **argv)
             }
             std::ofstream csv(metrics);
             if (!csv) throw std::runtime_error("Could not write metrics: " + metrics);
-            csv << "physics,particles,steps,dt,simulated_s,wall_ms,realtime_factor,contacts,sliding,max_speed,kinetic_energy,history_bytes,width_x,height,center_y,profiled\n";
+            csv << "physics,particles,steps,dt,simulated_s,wall_ms,realtime_factor,contacts,sliding,max_speed,kinetic_energy,history_bytes,width_x,height,center_y,profiled,rolling,rolling_coefficient,kr_ratio,rolling_damping,max_spin,rolling_yielding\n";
             csv << std::setprecision(10) << int(simulation.settings.physics) << ',' << state.size()
                 << ',' << measuredSteps << ',' << simulation.settings.dt << ',' << measuredSteps * double(simulation.settings.dt)
                 << ',' << measuredWall << ',' << (measuredWall > 0 ? measuredSteps * double(simulation.settings.dt) * 1000. / measuredWall : 0.)
                 << ',' << diagnostics.contacts << ',' << diagnostics.sliding << ',' << diagnostics.maximumSpeed
                 << ',' << diagnostics.kineticEnergy << ',' << diagnostics.historyBytes << ',' << maxX - minX
-                << ',' << height << ',' << centerY / mass << ',' << simulation.profile << '\n';
+                << ',' << height << ',' << centerY / mass << ',' << simulation.profile
+                << ',' << simulation.settings.rollingResistance << ',' << simulation.settings.rollingFriction
+                << ',' << simulation.settings.rollingStiffness << ',' << simulation.settings.rollingDamping
+                << ',' << diagnostics.maximumAngularSpeed << ',' << diagnostics.rollingYielding << '\n';
         }
         return 0;
     }

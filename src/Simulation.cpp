@@ -191,12 +191,16 @@ namespace oops
             result.maximumSpeed = std::max(result.maximumSpeed, std::sqrt(speed2));
             result.kineticEnergy += 0.5 * p.mass * speed2;
             if (settings.physics != Physics::Mochi)
+            {
                 result.kineticEnergy += 0.2 * p.mass * p.radius * p.radius * dot(angular[i], angular[i]);
+                result.maximumAngularSpeed = std::max(result.maximumAngularSpeed, length(angular[i]));
+            }
         }
         auto addState = [&](const ContactState& contact) {
             if (contact.normalForce > 0.f) {
                 ++result.contacts;
                 result.sliding += contact.sliding;
+                result.rollingYielding += contact.rollingYielding;
             }
         };
         if (settings.physics == Physics::Mochi) result.contacts = unsigned(contacts().size());
@@ -221,11 +225,14 @@ namespace oops
         auto writeContact = [](std::ostream& out, unsigned a, unsigned b, const ContactState& c) {
             out << a << ',' << b << ',' << c.displacement.x << ',' << c.displacement.y << ','
                 << c.displacement.z << ',' << c.tangentialForce.x << ',' << c.tangentialForce.y
-                << ',' << c.tangentialForce.z << ',' << c.normalForce << ',' << c.sliding << '\n';
+                << ',' << c.tangentialForce.z << ',' << c.normalForce << ',' << c.sliding
+                << ',' << c.rollingDisplacement.x << ',' << c.rollingDisplacement.y << ',' << c.rollingDisplacement.z
+                << ',' << c.rollingTorque.x << ',' << c.rollingTorque.y << ',' << c.rollingTorque.z
+                << ',' << c.rollingYielding << '\n';
         };
         std::ofstream pairs(path + ".contacts.csv"), walls(path + ".walls.csv");
         if (!pairs || !walls) throw std::runtime_error("Could not write contact state: " + path);
-        const char* header = "a,b,sx,sy,sz,ftx,fty,ftz,fn,sliding\n";
+        const char* header = "a,b,sx,sy,sz,ftx,fty,ftz,fn,sliding,rsx,rsy,rsz,rtx,rty,rtz,rolling_yielding\n";
         pairs << header << std::setprecision(9);
         walls << header << std::setprecision(9);
         for (auto contact : contactStates())

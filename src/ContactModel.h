@@ -13,6 +13,18 @@ struct ContactResult {
     ContactState state;
 };
 
+inline __both__ Vec3 transportDisplacement(Vec3 displacement, Vec3 normal) {
+    float oldLength = sqrtf(dot(displacement, displacement));
+    displacement -= dot(displacement, normal) * normal;
+    float newLength = sqrtf(dot(displacement, displacement));
+    if (newLength > 1.e-20f) displacement *= oldLength / newLength;
+    return displacement;
+}
+
+inline __both__ float inverseInertia(const Particle& p) {
+    return 2.5f / (p.mass * p.radius * p.radius);
+}
+
 // n points from B toward A. Relative surface velocity is A minus B.
 inline __both__ ContactResult evaluateContact(Vec3 n, float overlap, float reducedMass,
     Vec3 relativeVelocity, Vec3 rotationalVelocity, float armA, float armB,
@@ -32,10 +44,7 @@ inline __both__ ContactResult evaluateContact(Vec3 n, float overlap, float reduc
     Vec3 displacement(0.f);
     if (settings.physics == Physics::History) {
         // Transport the elastic displacement into the current contact plane.
-        float oldLength = sqrtf(dot(previous.displacement, previous.displacement));
-        displacement = previous.displacement - dot(previous.displacement, n) * n;
-        float newLength = sqrtf(dot(displacement, displacement));
-        if (newLength > 1.e-20f) displacement *= oldLength / newLength;
+        displacement = transportDisplacement(previous.displacement, n);
         displacement += tangentVelocity * dt;
     }
     Vec3 dampingForce = -tangentDamping * tangentVelocity;
@@ -57,6 +66,35 @@ inline __both__ ContactResult evaluateContact(Vec3 n, float overlap, float reduc
     return result;
 }
 
+// LAMMPS SDS convention: v_roll = R_eff * ((omegaA - omegaB) cross n).
+// The pseudo-force changes only torque, never the linear force accumulator.
+inline __both__ void applyRolling(ContactResult& result, Vec3 normal, float radius,
+    float inverseInertiaSum, Vec3 relativeOmega, ContactState previous,
+    const Settings& settings, ContactParameters parameters, float dt) {
+    if (!settings.rollingResistance || settings.rollingFriction == 0.f
+        || result.state.normalForce <= 0.f) return;
+    Vec3 velocity = radius * cross(relativeOmega, normal);
+    Vec3 displacement = transportDisplacement(previous.rollingDisplacement, normal) + dt * velocity;
+    float stiffness = settings.rollingStiffness * parameters.stiffness;
+    // Effective mass for the relative angular mode expressed in rolling-length units.
+    float mass = 1.f / (radius * radius * inverseInertiaSum);
+    float damping = 2.f * settings.rollingDamping * sqrtf(stiffness * mass);
+    Vec3 dampingForce = -damping * velocity;
+    Vec3 pseudoForce = -stiffness * displacement + dampingForce;
+    float magnitude = sqrtf(dot(pseudoForce, pseudoForce));
+    float limit = settings.rollingFriction * result.state.normalForce;
+    if (magnitude > limit) {
+        pseudoForce *= limit / magnitude;
+        displacement = (dampingForce - pseudoForce) / stiffness;
+        result.state.rollingYielding = 1;
+    }
+    Vec3 torque = radius * cross(normal, pseudoForce);
+    result.state.rollingDisplacement = displacement;
+    result.state.rollingTorque = torque;
+    result.torqueA += torque;
+    result.torqueB -= torque;
+}
+
 inline __both__ ContactResult sphereContact(const Particle& a, const Particle& b,
     Vec3 omegaA, Vec3 omegaB, ContactState previous, const Settings& settings,
     ContactParameters parameters, float dt) {
@@ -64,10 +102,15 @@ inline __both__ ContactResult sphereContact(const Particle& a, const Particle& b
     float distance = sqrtf(dot(delta, delta));
     Vec3 normal = distance > 0.f ? delta / distance : Vec3(1.f, 0.f, 0.f);
     float overlap = a.radius + b.radius - distance;
-    return evaluateContact(normal, overlap, a.mass * b.mass / (a.mass + b.mass),
+    auto result = evaluateContact(normal, overlap, a.mass * b.mass / (a.mass + b.mass),
         a.velocity - b.velocity, a.radius * omegaA + b.radius * omegaB,
         a.radius - 0.5f * overlap, b.radius - 0.5f * overlap,
         previous, settings, parameters, dt);
+    if (settings.rollingResistance)
+        applyRolling(result, normal, a.radius * b.radius / (a.radius + b.radius),
+                     inverseInertia(a) + inverseInertia(b), omegaA - omegaB,
+                     previous, settings, parameters, dt);
+    return result;
 }
 
 inline __both__ ContactResult wallContact(const Particle& p, Vec3 omega, int wall,
@@ -77,12 +120,12 @@ inline __both__ ContactResult wallContact(const Particle& p, Vec3 omega, int wal
     normal[axis] = wall % 2 ? -1.f : 1.f;
     float distance = wall % 2 ? settings.boxWidth - p.position[axis] : p.position[axis];
     if (!(settings.walls & (1u << wall)) || settings.boxWidth <= 0.f) return {};
-    return evaluateContact(normal, p.radius - distance, p.mass, p.velocity,
+    auto result = evaluateContact(normal, p.radius - distance, p.mass, p.velocity,
         p.radius * omega, p.radius, 0.f, previous, settings, parameters, dt);
-}
-
-inline __both__ float inverseInertia(const Particle& p) {
-    return 2.5f / (p.mass * p.radius * p.radius);
+    if (settings.rollingResistance)
+        applyRolling(result, normal, p.radius, inverseInertia(p), omega,
+                     previous, settings, parameters, dt);
+    return result;
 }
 
 } // namespace oops
