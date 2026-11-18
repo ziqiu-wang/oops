@@ -235,6 +235,29 @@ int main(int argc, char **argv)
                         stepCount = 0;
                         panel.resetRequested = false;
                     }
+                    if (panel.applySceneRequested)
+                    {
+                        panel.applySceneRequested = false;
+                        auto generated = makeScene(panel.scene);
+                        if (generated.empty())
+                        {
+                            panel.sceneStatus = "No grains fit: check that the blocks are inside the box.";
+                        }
+                        else
+                        {
+                            initial = std::move(generated);
+                            simulation.settings.boxWidth = panel.scene.boxWidth;
+                            simulation.settings.stiffness = panel.scene.stiffness;
+                            simulation.settings.dt = std::min(0.0004f, stableDt(initial, panel.scene.stiffness));
+                            simulation.resize(initial);
+                            stepCount = 0;
+                            orbit = simulation.defaultCamera();
+                            char status[96];
+                            std::snprintf(status, sizeof(status), "%d grains, dt = %.1e s",
+                                          int(initial.size()), simulation.settings.dt);
+                            panel.sceneStatus = status;
+                        }
+                    }
                     if (panel.recording && !wasRecording)
                     {
                         int take = 1;
@@ -267,13 +290,14 @@ int main(int argc, char **argv)
                     if (uint32_t *pixels = window.map())
                     {
                         simulation.renderTo(pixels, orbit.camera(), window.width(), window.height());
-                        if (panel.recording) {
+                        if (panel.recording)
+                        {
                             frame.resize(size_t(window.width()) * window.height());
                             cudaMemcpy(frame.data(), pixels, frame.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost);
                             char name[32];
                             std::snprintf(name, sizeof(name), "/frame_%05d.png", panel.recordedFrames++);
                             writeImage(recordDir + name, window.width(), window.height(), frame);
-                        }                   
+                        }
                         window.unmap();
                     }
                     auto t2 = Clock::now();

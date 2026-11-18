@@ -83,6 +83,22 @@ namespace oops
         timings = {};
     }
 
+    void Simulation::resize(const std::vector<Particle> &particles)
+    {
+        if (particles.empty()) {
+            throw std::runtime_error("Simulation needs at least one particle.");
+        }
+        cudaDeviceSynchronize();
+        particles_.upload(particles);
+        forces_.resize(particles.size());
+        oldAccelerations_.resize(particles.size());
+        forces_.clear();
+        oldAccelerations_.clear();
+        backend_->resize(particles_.data(), int(particles.size()));
+        steps = 0;
+        timings = {};
+    }
+
     std::vector<Contact> Simulation::contacts()
     {
         backend_->findContacts(settings);

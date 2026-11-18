@@ -1,5 +1,6 @@
 #pragma once
 #include "Simulation.h"
+#include "Scene.h"
 
 namespace oops
 {
@@ -30,6 +31,13 @@ namespace oops
         bool resetRequested = false;
         bool recording = false;
         int recordedFrames = 0;
+
+        // scene builder
+        SceneDesc scene;
+        int selectedBlock = 0;
+        int presetIndex = -1;
+        bool applySceneRequested = false;
+        std::string sceneStatus;
     };
 
     void drawPanel(Simulation &simulation, PanelState &state);

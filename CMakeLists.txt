@@ -45,7 +45,7 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
 
-add_library(oops_common src/Scene.cpp src/Reference.cpp)
+add_library(oops_common src/Scene.cpp src/Reference.cpp src/CustomScene.cpp)
 target_include_directories(oops_common PUBLIC src external/owl/include)
 
 embed_ptx(OUTPUT_TARGET mochi_ptx
