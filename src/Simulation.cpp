@@ -46,15 +46,18 @@ namespace oops
         resetForces(particles_.data(), forces_.data(), int(particles_.size()), settings.gravity);
         syncIf(profile);
         auto start = Clock::now();
+        beginQueryTimer();
         if (response == Response::Fused)
         {
             backend_->accumulateForces(forces_.data(), settings);
+            endQueryTimer();
             syncIf(profile);
             timings.query += elapsed(start);
         }
         else
         {
             unsigned count = backend_->findContacts(settings);
+            endQueryTimer();
             syncIf(profile);
             timings.query += elapsed(start);
             start = Clock::now();
@@ -74,12 +77,10 @@ namespace oops
             syncIf(profile);
             timings.integrate += elapsed(start);
             ++steps;
-            start = Clock::now();
             backend_->waitForCuda();
-            backend_->update(rebuildEvery > 0 && steps % rebuildEvery == 0);
-            syncIf(profile);
-            timings.accel += elapsed(start);
+            updateAccel(rebuildEvery);
             granularForces(true);
+            reportBvhCosts();
             start = Clock::now();
             kickDrift(particles_.data(), omega_.data(), forces_.data(), torques_.data(),
                       int(particles_.size()), settings.dt, false);
@@ -93,11 +94,46 @@ namespace oops
         syncIf(profile);
         timings.integrate += elapsed(start);
         ++steps;
-        start = Clock::now();
-        backend_->update(rebuildEvery > 0 && steps % rebuildEvery == 0);
+        updateAccel(rebuildEvery);
+        computeForces();
+        reportBvhCosts();
+    }
+
+    void Simulation::updateAccel(int rebuildEvery)
+    {
+        adaptiveBvh_ = rebuildEvery < 0;
+        lastRebuilt_ = adaptiveBvh_ ? bvhOptimizer_.rebuild() : rebuildEvery > 0 && steps % rebuildEvery == 0;
+        auto start = Clock::now();
+        if (adaptiveBvh_)
+            accelGpu_.begin(backend_->defaultStream());
+        backend_->update(lastRebuilt_);
+        if (adaptiveBvh_)
+        {
+            accelGpu_.end(backend_->defaultStream());
+            lastAccelMs_ = accelGpu_.elapsedTime();
+        }
         syncIf(profile);
         timings.accel += elapsed(start);
-        computeForces();
+    }
+
+    void Simulation::beginQueryTimer()
+    {
+        if (adaptiveBvh_)
+            queryGpu_.begin(backend_->launchStream());
+    }
+
+    void Simulation::endQueryTimer()
+    {
+        if (!adaptiveBvh_)
+            return;
+        queryGpu_.end(backend_->launchStream());
+        lastQueryMs_ = queryGpu_.elapsedTime();
+    }
+
+    void Simulation::reportBvhCosts()
+    {
+        if (adaptiveBvh_)
+            bvhOptimizer_.update(lastRebuilt_, lastAccelMs_, lastQueryMs_);
     }
 
     void Simulation::upload(const std::vector<Particle> &particles)
@@ -108,6 +144,7 @@ namespace oops
         forces_.clear();
         oldAccelerations_.clear();
         history_.reset();
+        bvhOptimizer_ = bvhOptimizer{};
         forcesReady_ = false;
         if (settings.physics != Physics::Mochi) {
             if (response != Response::Contacts)
@@ -130,6 +167,19 @@ namespace oops
             cudaCheck(cudaDeviceSynchronize());
             timings = {};
         }
+    }
+
+    void Simulation::resize(const std::vector<Particle> &particles)
+    {
+        if (particles.empty()) {
+            throw std::runtime_error("Simulation needs at least one particle.");
+        }
+        cudaDeviceSynchronize(); // the GPU must finish with the old buffers before they are freed
+        particles_.upload(particles);
+        forces_.resize(particles.size());
+        oldAccelerations_.resize(particles.size());
+        backend_->resize(particles_.data(), int(particles.size()));
+        upload(particles); // resizes friction state and resets the dynamics
     }
 
     std::vector<Contact> Simulation::contacts()
@@ -169,7 +219,9 @@ namespace oops
                       count, settings.gravity);
         backend_->waitForCuda();
         auto start = Clock::now();
+        beginQueryTimer();
         unsigned pairs = backend_->findContacts(settings);
+        endQueryTimer();
         timings.query += elapsed(start);
         start = Clock::now();
         history_.apply(particles_.data(), omega_.data(), forces_.data(), torques_.data(),

@@ -35,6 +35,7 @@ namespace
                      "  --metrics FILE.csv         Final physical and runtime measurements\n"
                      "  --live-frames N             Close live viewer after N frames (0 = unlimited)\n"
                      "  --rebuild-every N           0 = refit only, 1 = always rebuild\n"
+                     "  --adaptive-bvh              Choose BVH rebuilds from measured GPU costs\n"
                      "  --dt F --stiffness F --restitution F --box-width F\n"
                      "  --gravity X Y Z            Default: 0 -9.81 0\n"
                      "  --strict-upstream          Original strict boundary predicates\n"
@@ -74,7 +75,7 @@ int main(int argc, char **argv)
         std::string metrics;
         View view = View::Path;
         int samples = 4, liveFrames = 0;
-        bool profile = false;
+        bool profile = false, adaptiveBvh = false;
         // for live output
         bool live = false;
         int displayEvery = 50;
@@ -164,6 +165,7 @@ int main(int argc, char **argv)
             }
             else if (option == "--samples") samples = std::stoi(value());
             else if (option == "--profile") profile = true;
+            else if (option == "--adaptive-bvh") adaptiveBvh = true;
             else if (option == "--metrics") metrics = value();
             else if (option == "--live-frames") liveFrames = std::stoi(value());
             else if (option == "--save-input")
@@ -210,6 +212,9 @@ int main(int argc, char **argv)
             throw std::runtime_error("Rolling resistance requires --physics normal, nohistory, or history.");
         if (scene != "mixed" && scene != "uniform" && scene != "clustered" && scene != "column")
             throw std::runtime_error("Scene must be mixed, uniform, clustered, or column.");
+
+        if (adaptiveBvh)
+            rebuildEvery = -1; // validated above; Simulation::step treats -1 as adaptive
 
         auto initial = input.empty() ? makeScene(count, scene, seed) : loadScene(input);
         if (!saveInput.empty())
@@ -281,6 +286,8 @@ int main(int argc, char **argv)
                 OrbitCamera orbit = simulation.defaultCamera();
                 PanelState panel;
                 panel.displayEvery = displayEvery;
+                panel.adaptiveBvh = rebuildEvery < 0;
+                const int fixedRebuildEvery = std::max(rebuildEvery, 0); // used while Adaptive BVH is unchecked
                 panel.pending = settings;
                 panel.view = int(view);
                 panel.samples = samples;
@@ -307,6 +314,37 @@ int main(int argc, char **argv)
                         panel.diagnostics = {};
                         panel.resetRequested = false;
                     }
+                    if (panel.applySceneRequested)
+                    {
+                        panel.applySceneRequested = false;
+                        auto generated = makeScene(panel.scene);
+                        if (generated.empty())
+                        {
+                            panel.sceneStatus = "No grains fit: check that the blocks are inside the box.";
+                        }
+                        else
+                        {
+                            initial = std::move(generated);
+                            // Apply scene also applies the physics chosen in the panel, like Reset.
+                            simulation.settings = panel.pending;
+                            simulation.response = panel.pending.physics == Physics::Mochi ? response : Response::Contacts;
+                            simulation.settings.boxWidth = panel.scene.boxWidth;
+                            simulation.settings.stiffness = panel.scene.stiffness;
+                            simulation.settings.dt = std::min(0.0004f, stableDt(initial, panel.scene.stiffness));
+                            // Reset copies panel.pending into the simulation, so keep the scene's values there.
+                            panel.pending.boxWidth = simulation.settings.boxWidth;
+                            panel.pending.stiffness = simulation.settings.stiffness;
+                            panel.pending.dt = simulation.settings.dt;
+                            simulation.resize(initial);
+                            stepCount = 0;
+                            panel.diagnostics = {};
+                            orbit = simulation.defaultCamera();
+                            char status[96];
+                            std::snprintf(status, sizeof(status), "%d grains, dt = %.1e s",
+                                          int(initial.size()), simulation.settings.dt);
+                            panel.sceneStatus = status;
+                        }
+                    }
                     if (panel.recording && !wasRecording)
                     {
                         int take = 1;
@@ -328,7 +366,7 @@ int main(int argc, char **argv)
 
                     for (int i = 0; i < stepsThisFrame; ++i)
                     {
-                        simulation.step(rebuildEvery);
+                        simulation.step(panel.adaptiveBvh ? -1 : fixedRebuildEvery);
                         afterStep();
                     }
                     if (panel.advancedStats)

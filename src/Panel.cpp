@@ -1,5 +1,7 @@
 #include "Panel.h"
 #include <imgui.h>
+#include <algorithm>
+#include <cstdio>
 
 namespace oops
 {
@@ -20,7 +22,88 @@ namespace oops
             ImGui::Text("%.1f fps", ImGui::GetIO().Framerate);
             ImGui::End();
         }
-    }
+
+        const char *shapeNames[] = {"Box", "Sphere", "Cylinder"};
+
+        void editBlock(Block &block)
+        {
+            int shape = int(block.shape);
+            if (ImGui::Combo("Shape", &shape, shapeNames, 3))
+                block.shape = Shape(shape);
+            ImGui::DragFloat3("Center", &block.center.x, 0.005f, 0.f, 3.f, "%.3f");
+            ImGui::DragFloat3("Size", &block.size.x, 0.005f, 0.01f, 3.f, "%.3f");
+            ImGui::SliderFloat("Grain radius", &block.radius, 0.004f, 0.06f, "%.4f",
+                               ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Size spread", &block.spread, 0.f, 0.8f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat3("Velocity", &block.velocity.x, 0.05f, -10.f, 10.f, "%.2f");
+        }
+
+        void drawSceneSection(PanelState &state)
+        {
+            ImGui::SeparatorText("Scene");
+            ImGui::PushItemWidth(-100.f);
+
+            static const std::vector<Preset> presets = scenePresets();
+            const char *current = state.presetIndex >= 0 ? presets[state.presetIndex].name : "Custom";
+            if (ImGui::BeginCombo("Preset", current))
+            {
+                for (int i = 0; i < int(presets.size()); ++i)
+                {
+                    if (ImGui::Selectable(presets[i].name, i == state.presetIndex))
+                    {
+                        state.presetIndex = i;
+                        state.scene = presets[i].scene;
+                        state.selectedBlock = 0;
+                        state.applySceneRequested = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            auto &blocks = state.scene.blocks;
+            int total = 0;
+            for (int i = 0; i < int(blocks.size()); ++i)
+            {
+                int estimate = estimateCount(blocks[i]);
+                total += estimate;
+                char label[64];
+                std::snprintf(label, sizeof(label), "%d: %s (~%d grains)", i + 1, shapeNames[int(blocks[i].shape)], estimate);
+                if (ImGui::Selectable(label, i == state.selectedBlock))
+                    state.selectedBlock = i;
+            }
+
+            if (ImGui::Button("Add block"))
+            {
+                Block copy = blocks[state.selectedBlock];
+                blocks.push_back(copy);
+                state.selectedBlock = int(blocks.size()) - 1;
+                state.presetIndex = -1;
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(blocks.size() <= 1);
+            if (ImGui::Button("Remove block"))
+            {
+                blocks.erase(blocks.begin() + state.selectedBlock);
+                state.selectedBlock = std::min(state.selectedBlock, int(blocks.size()) - 1);
+                state.presetIndex = -1;
+            }
+            ImGui::EndDisabled();
+
+            ImGui::PushID(state.selectedBlock);
+            editBlock(blocks[state.selectedBlock]);
+            ImGui::PopID();
+
+            ImGui::SliderFloat("Container size", &state.scene.boxWidth, 0.3f, 3.f, "%.2f m", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::TextDisabled("About %d grains in total", total);
+            if (ImGui::Button("Apply scene"))
+                state.applySceneRequested = true;
+            if (!state.sceneStatus.empty())
+                ImGui::TextWrapped("%s", state.sceneStatus.c_str());
+
+            ImGui::PopItemWidth();
+        }
+
+    } // namespace
 
     void drawPanel(Simulation &simulation, PanelState &state)
     {
@@ -73,11 +156,15 @@ namespace oops
 
         ImGui::SliderInt("Steps/frame", &state.displayEvery, 1, 500, "%d", ImGuiSliderFlags_AlwaysClamp);
         ImGui::Text("Sim time: %.3f s", simulation.steps * simulation.settings.dt);
+        ImGui::Checkbox("Adaptive BVH", &state.adaptiveBvh);
 
         ImGui::SeparatorText("Material (apply with Reset)");
         int physics = int(state.pending.physics);
         ImGui::Combo("Physics", &physics, "Mochi baseline\0Normal only\0Velocity friction\0History friction\0");
         state.pending.physics = Physics(physics);
+        if (state.pending.physics != simulation.settings.physics ||
+            state.pending.rollingResistance != simulation.settings.rollingResistance)
+            ImGui::TextColored(ImVec4(1.f, 0.8f, 0.3f, 1.f), "Not applied yet: press Reset or Apply scene");
         ImGui::SliderFloat("Friction", &state.pending.friction, 0.f, 1.5f);
         ImGui::SliderFloat("k_t / k_n", &state.pending.tangentialStiffness, 0.05f, 1.f);
         ImGui::SliderFloat("Tangential damping", &state.pending.tangentialDamping, 0.f, 3.f);
@@ -118,6 +205,8 @@ namespace oops
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.f, 0.3f, 0.3f, 1.f), "REC  %d frames", state.recordedFrames);
         }
+
+        drawSceneSection(state);
 
         // stat buttons
         ImGui::Checkbox("Show FPS", &state.showFps);

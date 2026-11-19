@@ -3,6 +3,8 @@
 #include "OptixBackend.h"
 #include "OrbitCamera.h"
 #include "ContactHistory.h"
+#include "GpuTimer.h"
+#include "bvhOptimizer.h"
 #include <memory>
 
 namespace oops {
@@ -12,8 +14,9 @@ public:
     Simulation(const std::vector<Particle>& particles, Settings settings = {},
                Response response = Response::Contacts, unsigned contactCapacity = 0);
     void computeForces();
-    void step(int rebuildEvery = 0);
+    void step(int rebuildEvery = 0); // 0 = refit only, N = rebuild every N steps, -1 = adaptive
     void upload(const std::vector<Particle>& particles); // Same count; resets dynamics.
+    void resize(const std::vector<Particle>& particles); // any count, resets dynamics
     std::vector<Particle> particles() const { return particles_.download(); }
     std::vector<Vec3> forces() const { return forces_.download(); }
     std::vector<Contact> contacts();
@@ -44,6 +47,16 @@ private:
     ContactHistory history_;
     bool forcesReady_ = false;
     void granularForces(bool advance);
+    void updateAccel(int rebuildEvery);
+    void beginQueryTimer();
+    void endQueryTimer();
+    void reportBvhCosts();
+
+    // Adaptive BVH schedule. The GPU timers force a sync, so they only run when it is enabled.
+    GpuTimer accelGpu_, queryGpu_;
+    bvhOptimizer bvhOptimizer_;
+    bool adaptiveBvh_ = false, lastRebuilt_ = false;
+    float lastAccelMs_ = 0.f, lastQueryMs_ = 0.f;
     std::unique_ptr<OptixBackend> backend_;
 };
 
